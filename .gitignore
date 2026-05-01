@@ -1,0 +1,22 @@
+# Virtual Environment
+venv/
+.env
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Datasets
+data/
+*.zip
+*.tar.gz
+
+# Model Weights & Checkpoints
+outputs/checkpoints/
+*.pth
+*.pt
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
