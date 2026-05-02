@@ -141,6 +141,8 @@ Target   : Bidirectional matching validated on
 ### Module 1 — Baseline Prediction Samples
 > Ground Truth (Red) vs Model Prediction (Cyan) overlaid on Sentinel-1 SAR input
 
+![Visual Predictions](outputs/predictions/predictions.png)
+
 *Run `python -m src.visualize` to generate `outputs/predictions/predictions.png`*
 
 ---
