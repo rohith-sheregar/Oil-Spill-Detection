@@ -14,9 +14,12 @@ data/
 *.tar.gz
 
 # Model Weights & Checkpoints
-outputs/checkpoints/
-*.pth
-*.pt
+outputs/checkpoints/*.pth
+outputs/checkpoints/*.pt
+outputs/checkpoints/*.pkl
+
+# Prediction outputs
+outputs/predictions/
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
