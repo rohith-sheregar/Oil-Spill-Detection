@@ -4,7 +4,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ── Dataset selector ──────────────────────────────────────────────────────────
 # Options: "sos", "mklab", "combined"
-DATASET = "mklab"
+DATASET = "combined"
 
 # ── SOS Dataset paths ─────────────────────────────────────────────────────────
 DATA_DIR = os.path.join(BASE_DIR, "data", "sos")
@@ -12,6 +12,12 @@ TRAIN_IMG_DIR = os.path.join(DATA_DIR, "train", "sentinel", "image")
 TRAIN_MASK_DIR = os.path.join(DATA_DIR, "train", "sentinel", "label")
 TEST_IMG_DIR = os.path.join(DATA_DIR, "test", "sentinel", "image")
 TEST_MASK_DIR = os.path.join(DATA_DIR, "test", "sentinel", "label")
+
+# ── SOS PALSAR Dataset paths ──────────────────────────────────────────────────
+PALSAR_TRAIN_IMG_DIR = os.path.join(DATA_DIR, "train", "palsar", "image")
+PALSAR_TRAIN_MASK_DIR = os.path.join(DATA_DIR, "train", "palsar", "label")
+PALSAR_TEST_IMG_DIR = os.path.join(DATA_DIR, "test", "palsar", "image")
+PALSAR_TEST_MASK_DIR = os.path.join(DATA_DIR, "test", "palsar", "label")
 
 # ── MKLab Dataset paths ──────────────────────────────────────────────────────
 MKLAB_DIR = os.path.join(BASE_DIR, "data", "mklabs")
@@ -25,7 +31,7 @@ PRED_DIR = os.path.join(BASE_DIR, "outputs", "predictions")
 
 IMAGE_SIZE = 256
 BATCH_SIZE = 8
-NUM_EPOCHS = 30
+NUM_EPOCHS = 50
 LEARNING_RATE = 2e-4
 NUM_WORKERS = 2
 PIN_MEMORY = True

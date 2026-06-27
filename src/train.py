@@ -74,5 +74,43 @@ def run_training():
             )
             print(f"  → Saved best model (IoU: {best_iou:.4f})")
 
+def run_training_with_loaders(train_loader, val_loader, test_loader=None):
+    """
+    Same as run_training() but accepts pre-built loaders.
+    Use this from Kaggle notebooks when you need custom dataset combinations.
+    """
+    device = config.DEVICE
+    print(f"Using device: {device}")
+    os.makedirs(config.CHECKPOINT_DIR, exist_ok=True)
+
+    model = get_model(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.LEARNING_RATE)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=config.NUM_EPOCHS
+    )
+
+    best_iou = 0
+    for epoch in range(1, config.NUM_EPOCHS + 1):
+        train_loss = train_one_epoch(model, train_loader, optimizer, device)
+        val_dice, val_iou = evaluate(model, val_loader, device)
+        scheduler.step()
+
+        print(
+            f"Epoch {epoch:02d}/{config.NUM_EPOCHS} | "
+            f"Loss: {train_loss:.4f} | "
+            f"Val Dice: {val_dice:.4f} | "
+            f"Val IoU: {val_iou:.4f}"
+        )
+
+        if val_iou > best_iou:
+            best_iou = val_iou
+            save_checkpoint(
+                model, optimizer, epoch,
+                os.path.join(config.CHECKPOINT_DIR, "best_model.pth")
+            )
+            print(f"  → Saved best model (IoU: {best_iou:.4f})")
+
+    print(f"\nTraining complete. Best Val IoU: {best_iou:.4f}")
+
 if __name__ == "__main__":
     run_training()

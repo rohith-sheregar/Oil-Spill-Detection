@@ -15,11 +15,11 @@ def get_transforms(train=True):
             A.RandomRotate90(p=0.5),
             A.GaussianBlur(p=0.2),
             A.GaussNoise(p=0.2),
-            A.Normalize(mean=(0.5, 0.5), std=(0.5, 0.5)),
+            A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
             ToTensorV2(),
         ])
     return A.Compose([
-        A.Normalize(mean=(0.5, 0.5), std=(0.5, 0.5)),
+        A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
         ToTensorV2(),
     ])
 
@@ -183,9 +183,14 @@ def get_loaders(batch_size=config.BATCH_SIZE, dataset=None):
         )
 
     elif ds_choice == "combined":
-        sos_train = SOSDataset(
+        sentinel_train = SOSDataset(
             config.TRAIN_IMG_DIR,
             config.TRAIN_MASK_DIR,
+            transform=get_transforms(train=True)
+        )
+        palsar_train = SOSDataset(
+            config.PALSAR_TRAIN_IMG_DIR,
+            config.PALSAR_TRAIN_MASK_DIR,
             transform=get_transforms(train=True)
         )
         mklab_train = MKLabDataset(
@@ -193,11 +198,16 @@ def get_loaders(batch_size=config.BATCH_SIZE, dataset=None):
             config.MKLAB_TRAIN_LABEL_DIR,
             transform=get_transforms(train=True),
         )
-        full_dataset = ConcatDataset([sos_train, mklab_train])
+        full_dataset = ConcatDataset([sentinel_train, palsar_train, mklab_train])
 
-        sos_test = SOSDataset(
+        sentinel_test = SOSDataset(
             config.TEST_IMG_DIR,
             config.TEST_MASK_DIR,
+            transform=get_transforms(train=False)
+        )
+        palsar_test = SOSDataset(
+            config.PALSAR_TEST_IMG_DIR,
+            config.PALSAR_TEST_MASK_DIR,
             transform=get_transforms(train=False)
         )
         mklab_test = MKLabDataset(
@@ -205,7 +215,7 @@ def get_loaders(batch_size=config.BATCH_SIZE, dataset=None):
             config.MKLAB_TEST_LABEL_DIR,
             transform=get_transforms(train=False),
         )
-        test_ds = ConcatDataset([sos_test, mklab_test])
+        test_ds = ConcatDataset([sentinel_test, palsar_test, mklab_test])
     else:
         raise ValueError(f"Unknown dataset: '{ds_choice}'. Use 'sos', 'mklab', or 'combined'.")
 
