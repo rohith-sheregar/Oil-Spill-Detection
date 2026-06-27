@@ -113,10 +113,11 @@ Epoch 30 → Val IoU: 0.6530  (plateau, loss still dropping)
 | Feature extractor (`features.py`) | ✅ Complete | 13 geometric + contextual features per patch |
 | Random Forest classifier (`classifier.py`) | ✅ Complete | 200 trees, balanced class weights |
 | End-to-end pipeline (`pipeline.py`) | ✅ Complete | M1 → M2 → colour-coded visualisation |
-| Classifier training (`train_module2.py`) | ✅ Complete | Synthetic negatives from background patches |
+| Classifier training (`train_module2.py`) | ✅ Complete | **Real MKLab look-alike labels** (class 2) |
 
 ```
 Target   : > 80% false positive reduction
+Data     : MKLab dataset (real oil_spill + look_alike labels)
 Saved    : outputs/checkpoints/module2_classifier.pkl
 ```
 
@@ -159,7 +160,7 @@ Target   : Bidirectional matching validated on
 ```
 oil-spill-sar-detection/
 ├── src/
-│   ├── dataset.py              Module 1 — Data loading + augmentation
+│   ├── dataset.py              Data loading (SOS + MKLab) + augmentation
 │   ├── model.py                Module 1 — DeepLabv3+ + scSE architecture
 │   ├── train.py                Module 1 — Training loop + checkpointing
 │   ├── utils.py                Module 1 — Loss functions + metrics
@@ -167,32 +168,32 @@ oil-spill-sar-detection/
 │   ├── features.py             Module 2 — Geometric feature extraction
 │   ├── classifier.py           Module 2 — Random Forest classifier
 │   ├── pipeline.py             Module 2 — End-to-end M1 → M2 pipeline
-│   └── train_module2.py        Module 2 — Classifier training script
+│   └── train_module2.py        Module 2 — Classifier training (MKLab/SOS)
 ├── notebooks/
 │   └── kaggle_training.ipynb   GPU training notebook (Kaggle T4)
 ├── data/
-│   └── sos/
-│       ├── train/
-│       │   ├── sentinel/image/     Sentinel-1 Persian Gulf patches
-│       │   ├── sentinel/label/     Binary masks
-│       │   ├── palsar/image/       ALOS Gulf of Mexico patches
-│       │   └── palsar/label/       Binary masks
-│       └── test/
-│           ├── sentinel/image/
-│           ├── sentinel/label/
-│           ├── palsar/image/
-│           └── palsar/label/
+│   ├── sos/                    SOS dataset (binary: oil vs background)
+│   │   ├── train/sentinel/     Sentinel-1 Persian Gulf patches
+│   │   ├── train/palsar/       ALOS Gulf of Mexico patches
+│   │   └── test/               Held-out test sets
+│   └── mklabs/                 MKLab dataset (5-class: sea/oil/look-alike/ship/land)
+│       ├── train/images/       1,002 SAR images (.jpg, 1250x650)
+│       ├── train/labels_1D/    Ground truth class masks (.png)
+│       └── test/               110 test samples
 ├── outputs/
 │   ├── checkpoints/
-│   │   ├── best_model.pth          Best M1 weights (134 MB, gitignored)
+│   │   ├── best_model.pth          Best M1 weights (gitignored)
 │   │   └── module2_classifier.pkl  Trained M2 classifier (gitignored)
 │   └── predictions/
 │       └── pipeline_result.png     M1+M2 pipeline visualization
-├── config.py                   Central configuration
+├── config.py                   Central configuration (dataset selector)
 ├── requirements.txt            Dependencies
 ├── evaluate.py                 Benchmark any .pth checkpoint on test set
 ├── smoke_test.py               Module 1 pipeline verification
-└── test_module2.py             Module 2 smoke test (9 checks)
+├── test_module2.py             Module 2 smoke test (9 checks)
+├── train_module1.py            Run Module 1 training (--dataset sos/mklab/combined)
+├── train_module2.py            Run Module 2 training (--no-mklab for legacy)
+└── predict_pipeline.py         Run full integrated pipeline (M1 + M2) on test data
 ```
 
 ---
@@ -227,47 +228,57 @@ Output: 256×256×1 binary mask (sigmoid threshold 0.5)
 | **CLAHE augmentation** | Standard contrast | Handles SAR contrast variation across acquisition geometries |
 | **Gradient clipping (norm=1.0)** | None | Prevents loss spikes with combined datasets |
 
-### Dataset
+### Datasets
 
-#### Module 1 Baseline (Sentinel Only)
+#### SOS Dataset (Baseline — Binary)
 | Split | Images | Source |
 |---|---|---|
 | Train | 2,851 | SOS Sentinel — Persian Gulf 2017 spill |
 | Validation | 503 | SOS Sentinel (15% holdout) |
 | Test | 839 | SOS Sentinel — unseen set |
 
-#### Combined Training (Kaggle GPU run)
-| Subset | Images | Sensor | Region |
+#### MKLab Dataset (Current — 5-Class)
+| Split | Images | Source | Resolution |
 |---|---|---|---|
-| SOS Sentinel | ~3,500 | Sentinel-1A, C-band VV | Persian Gulf |
-| SOS PALSAR | ~2,955 | ALOS PALSAR, L-band HH | Gulf of Mexico |
-| **Combined train** | **6,455** | Multi-sensor | Multi-region |
-| **Combined test** | **~1,615** | Multi-sensor | Multi-region |
+| Train | 852 (85%) | MKLab SAR oil spill dataset | 1250x650 |
+| Validation | 150 (15%) | MKLab (holdout from train) | 1250x650 |
+| Test | 110 | MKLab — unseen test set | 1250x650 |
+
+**MKLab Label Classes:**
+| Class ID | Label | Usage |
+|---|---|---|
+| 0 | Sea Surface | Background for M1 |
+| 1 | Oil Spill | Positive class for M1 + M2 |
+| 2 | Look-alike | Negative class for M2 (real!) |
+| 3 | Ship | Background for M1 |
+| 4 | Land | Background for M1 |
+
+> For Module 1 binary segmentation, class 1 (Oil Spill) = 1, all other classes = 0.
 
 ### Training Configuration
 
-#### Baseline (CPU — Module 1 initial)
+#### Baseline (CPU — SOS Sentinel Only)
 ```
 Optimizer  : AdamW  (lr=2e-4)
 Scheduler  : CosineAnnealingLR (T_max=30)
 Loss       : BCE (label smooth ε=0.1) + Soft Dice (50/50)
 Batch size : 8
 Epochs     : 30
-Image size : 256×256
+Image size : 256x256
 Dataset    : Sentinel only (2,851 train samples)
-Best epoch : 11  →  Val IoU 0.6662,  Test IoU 0.6409
+Best epoch : 11  ->  Val IoU 0.6662,  Test IoU 0.6409
 ```
 
-#### Optimised (Kaggle T4 GPU)
+#### MKLab Training (Current)
 ```
-Optimizer  : AdamW  (lr=1e-4)
-Scheduler  : CosineAnnealingLR (T_max=50)
-Loss       : BCE (label smooth ε=0.1) + Soft Dice (50/50)
+Optimizer  : AdamW  (lr=2e-4)
+Scheduler  : CosineAnnealingLR (T_max=30)
+Loss       : BCE + Soft Dice (50/50)
 Batch size : 8
-Epochs     : 50
-Image size : 256×256
-Grad clip  : max_norm=1.0
-Dataset    : Sentinel + PALSAR combined (6,455 train samples)
+Epochs     : 30
+Image size : 256x256 (resized from 1250x650)
+Dataset    : MKLab (852 train / 150 val / 110 test)
+Status     : Pending training run
 ```
 
 ---
@@ -299,14 +310,14 @@ Filter : is_oil = True if label == 'oil_spill'
 Target : > 80% false positive reduction
 ```
 
-### 🗃️ Dataset Status & Next Steps
+### 🗃️ Dataset Status
 
 > [!NOTE]
-> **The Module 2 code pipeline is 100% complete**, including feature extraction, training scripts, and end-to-end integration. However, the *training data* currently in use is a temporary synthetic proxy.
+> **The MKLab dataset has been fully integrated.** Module 2 now trains on **real oil_spill (class 1) and look_alike (class 2) labels** from the MKLab dataset, replacing the previous synthetic negative approach.
 
-1. **Current State (Synthetic Data)**: Since the base SOS dataset only contains oil spills (no labeled look-alikes), the classifier is temporarily trained on *synthetic negative samples* generated by taking the background regions (inverted masks) of real oil spill images. This proves the pipeline works end-to-end.
-2. **The Target (MKLab Dataset)**: To achieve realistic, publishable accuracy, we are awaiting academic approval for the **MKLab extended dataset**. This is one of the only public SAR datasets with explicitly labeled `look-alike` classes alongside `oil_spill`, `ship`, `land`, and `sea`.
-3. **Next Action**: Once the MKLab dataset is acquired, we will simply drop the new images into the `data/` folder and re-run `train_module2.py`. In the meantime, development will shift forward to **Module 3 (AIS Vessel Filtering)**.
+1. **Current State (MKLab Real Data)**: The classifier now uses ground-truth oil spill and look-alike masks from the MKLab dataset. Feature extraction runs directly on the labeled regions — no Module 1 inference needed for training data generation.
+2. **Legacy Fallback**: The SOS-based synthetic negative pipeline is preserved and can be activated with `python train_module2.py --no-mklab`.
+3. **Next Action**: Train Module 1 on MKLab data to establish new accuracy baseline, then proceed to **Module 3 (AIS Vessel Filtering)**.
 
 ### Pipeline Output Legend
 | Colour | Meaning |
@@ -405,7 +416,9 @@ pip install -r requirements.txt
 ```
 
 ### Dataset Setup
-```
+**Dataset Download Link:** [Google Drive](https://drive.google.com/file/d/12grU_EAPbW75eyyHj-U5pOfnwQzm0MFw/view)
+
+```text
 Place SOS dataset inside data/sos/ following this exact structure:
   data/sos/train/sentinel/image/   ← Sentinel-1 image patches (.png)
   data/sos/train/sentinel/label/   ← Binary masks (.png)
@@ -425,7 +438,7 @@ python smoke_test.py
 
 ### Train Module 1
 ```bash
-python -m src.train
+python train_module1.py
 # Saves best checkpoint to outputs/checkpoints/best_model.pth
 ```
 
@@ -443,14 +456,18 @@ python test_module2.py
 
 ### Train Module 2 Classifier
 ```bash
-python -m src.train_module2
+python train_module2.py
 # Saves to outputs/checkpoints/module2_classifier.pkl
 ```
 
-### Run Full M1 → M2 Pipeline on Any Image
+### Run Full M1 → M2 Pipeline (Test Set or Custom Image)
 ```bash
-python -m src.pipeline data/sos/test/sentinel/image/0.png
-# Auto-loads module2_classifier.pkl, saves to outputs/predictions/pipeline_result.png
+# Predict on entire test dataset
+python predict_pipeline.py
+
+# Predict on a specific single image
+python predict_pipeline.py --image data/sos/test/sentinel/image/0.png
+# Auto-loads module2_classifier.pkl, saves to outputs/predictions/
 ```
 
 ### Visualize Module 1 Predictions

@@ -15,15 +15,15 @@ print("  MODULE 2 SMOKE TEST")
 print("=" * 60)
 
 # 1. Import checks
-print("\n[1/9] Checking imports…", end=" ")
+print("\n[1/9] Checking imports...", end=" ")
 try:
     from src.features import (
         PatchFeatures, extract_features, features_to_array, describe_patch
     )
     from src.classifier import LookAlikeClassifier
-    print("OK ✓")
+    print("OK [PASS]")
 except Exception as e:
-    print(f"FAILED ✗\n  {e}")
+    print(f"FAILED [FAIL]\n  {e}")
     traceback.print_exc()
     sys.exit(1)
 
@@ -39,13 +39,13 @@ mask[10:15,   10:15] = 1   # tiny blob — should be filtered (< 50 px)
 image = np.random.randint(50, 200, (256, 256), dtype=np.uint8)
 
 # ─── Test 2: extract_features ─────────────────────────────────────────────────
-print("\n[2/9] extract_features…", end=" ")
+print("\n[2/9] extract_features...", end=" ")
 try:
     features = extract_features(mask, image, acquisition_hour=2)  # night
     assert len(features) == 2, f"Expected 2 valid patches, got {len(features)}"
-    print(f"OK ✓  ({len(features)} patches found, tiny blob correctly filtered)")
+    print(f"OK [PASS] ({len(features)} patches found, tiny blob correctly filtered)")
 except Exception as e:
-    print(f"FAILED ✗\n  {e}")
+    print(f"FAILED [FAIL]\n  {e}")
     traceback.print_exc()
     sys.exit(1)
 
@@ -61,46 +61,46 @@ print(f"    mean_intensity: {f0.mean_intensity:.4f}")
 print(f"    is_night      : {f0.is_night}")
 
 # ─── Test 3: features_to_array ────────────────────────────────────────────────
-print("\n[3/9] features_to_array…", end=" ")
+print("\n[3/9] features_to_array...", end=" ")
 try:
     arr = features_to_array(features)
     assert arr.shape == (2, 13), f"Expected (2,13), got {arr.shape}"
-    print(f"OK ✓  shape={arr.shape}")
+    print(f"OK [PASS] shape={arr.shape}")
 
     # Also test empty case
     empty_arr = features_to_array([])
     assert empty_arr.shape == (0, 13), f"Empty case: expected (0,13), got {empty_arr.shape}"
-    print("        Empty list → (0,13) ✓")
+    print("        Empty list -> (0,13) [PASS]")
 except Exception as e:
-    print(f"FAILED ✗\n  {e}")
+    print(f"FAILED [FAIL]\n  {e}")
     traceback.print_exc()
     sys.exit(1)
 
 # ─── Test 4: describe_patch ───────────────────────────────────────────────────
-print("\n[4/9] describe_patch…", end=" ")
+print("\n[4/9] describe_patch...", end=" ")
 try:
     desc = describe_patch(features[0])
     assert "Area" in desc and "Elongation" in desc
-    print(f"OK ✓")
-    print(f"  → {desc}")
+    print(f"OK [PASS]")
+    print(f"  -> {desc}")
 except Exception as e:
-    print(f"FAILED ✗\n  {e}")
+    print(f"FAILED [FAIL]\n  {e}")
     traceback.print_exc()
     sys.exit(1)
 
 # ─── Test 5: LookAlikeClassifier instantiation ───────────────────────────────
-print("\n[5/9] LookAlikeClassifier instantiation…", end=" ")
+print("\n[5/9] LookAlikeClassifier instantiation...", end=" ")
 try:
     clf = LookAlikeClassifier()
     assert not clf.is_trained, "Should be untrained on init"
-    print("OK ✓  (is_trained=False as expected)")
+    print("OK [PASS] (is_trained=False as expected)")
 except Exception as e:
-    print(f"FAILED ✗\n  {e}")
+    print(f"FAILED [FAIL]\n  {e}")
     traceback.print_exc()
     sys.exit(1)
 
 # ─── Test 6: Train on synthetic data ─────────────────────────────────────────
-print("\n[6/9] Training classifier on 100 synthetic samples…", end=" ")
+print("\n[6/9] Training classifier on 100 synthetic samples...", end=" ")
 try:
     np.random.seed(42)
     X_synth = np.random.rand(100, 13).astype(np.float32)
@@ -109,7 +109,7 @@ try:
     results = clf.train(X_synth, y_synth)
     assert clf.is_trained
     accuracy = results["accuracy"]
-    print(f"OK ✓  accuracy={accuracy:.4f}")
+    print(f"OK [PASS] accuracy={accuracy:.4f}")
 
     fi = results["feature_importances"]
     top3 = list(fi.items())[:3]
@@ -117,12 +117,12 @@ try:
     for rank, (name, imp) in enumerate(top3, start=1):
         print(f"    {rank}. {name:<20s} {imp:.4f}")
 except Exception as e:
-    print(f"FAILED ✗\n  {e}")
+    print(f"FAILED [FAIL]\n  {e}")
     traceback.print_exc()
     sys.exit(1)
 
 # ─── Test 7: predict ──────────────────────────────────────────────────────────
-print("\n[7/9] predict on 2 real patches…", end=" ")
+print("\n[7/9] predict on 2 real patches...", end=" ")
 try:
     preds = clf.predict(features)
     assert len(preds) == 2
@@ -131,39 +131,39 @@ try:
         assert "confidence" in p
         assert "is_oil"     in p
         assert 0.0 <= p["confidence"] <= 1.0
-    print(f"OK ✓")
+    print(f"OK [PASS]")
     for i, p in enumerate(preds):
         print(f"  Patch {i+1}: label={p['label']}, confidence={p['confidence']:.4f}, is_oil={p['is_oil']}")
 except Exception as e:
-    print(f"FAILED ✗\n  {e}")
+    print(f"FAILED [FAIL]\n  {e}")
     traceback.print_exc()
     sys.exit(1)
 
 # ─── Test 8: predict on empty list ───────────────────────────────────────────
-print("\n[8/9] predict on empty feature list…", end=" ")
+print("\n[8/9] predict on empty feature list...", end=" ")
 try:
     empty_preds = clf.predict([])
     assert empty_preds == []
-    print("OK ✓  (returns empty list)")
+    print("OK [PASS] (returns empty list)")
 except Exception as e:
-    print(f"FAILED ✗\n  {e}")
+    print(f"FAILED [FAIL]\n  {e}")
     traceback.print_exc()
     sys.exit(1)
 
 # ─── Test 9: run_pipeline with dummy path → FileNotFoundError ─────────────────
-print("\n[9/9] run_pipeline with bad checkpoint path → FileNotFoundError…", end=" ")
+print("\n[9/9] run_pipeline with bad checkpoint path -> FileNotFoundError...", end=" ")
 try:
     from src.pipeline import run_pipeline, load_module1
     # Directly test load_module1 with a non-existent path
     try:
         load_module1("/nonexistent/path/best_model.pth", "cpu")
-        print("FAILED ✗  (should have raised an error)")
+        print("FAILED [FAIL] (should have raised an error)")
         sys.exit(1)
     except (FileNotFoundError, RuntimeError, Exception):
         # Any error here is acceptable — we just confirm it fails gracefully
-        print("OK ✓  (fails gracefully, does not crash)")
+        print("OK [PASS] (fails gracefully, does not crash)")
 except Exception as e:
-    print(f"FAILED ✗ (unexpected error: {e})")
+    print(f"FAILED [FAIL] (unexpected error: {e})")
     traceback.print_exc()
     sys.exit(1)
 
@@ -173,5 +173,5 @@ print(clf.get_feature_importance_report())
 
 # ─── PASS ─────────────────────────────────────────────────────────────────────
 print("\n" + "=" * 60)
-print("  MODULE 2 SMOKE TEST PASSED ✅")
+print("  MODULE 2 SMOKE TEST PASSED [ALL PASS]")
 print("=" * 60)

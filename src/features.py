@@ -194,7 +194,7 @@ def describe_patch(f) -> str:
         Formatted description string.
     """
     return (
-        f"Area: {f.area_km2:.3f}km² | "
+        f"Area: {f.area_km2:.3f}sq.km | "
         f"Elongation: {f.elongation:.2f} | "
         f"Compactness: {f.compactness:.3f} | "
         f"Night: {bool(f.is_night)}"

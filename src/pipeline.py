@@ -317,6 +317,7 @@ def run_pipeline(
     visualize_pipeline(original_image, binary_mask, features, predictions, save_path)
 
     return {
+        "image":            original_image,
         "mask":             binary_mask,
         "features":         features,
         "predictions":      predictions,

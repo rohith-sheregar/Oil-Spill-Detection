@@ -214,6 +214,6 @@ class LookAlikeClassifier:
         )
         lines = ["Feature Importances (ranked):"]
         for rank, (name, importance) in enumerate(ranked, start=1):
-            bar = "█" * int(importance * 40)
+            bar = "=" * int(importance * 40)
             lines.append(f"  {rank:2d}. {name:<20s} {importance:.4f} {bar}")
         return "\n".join(lines)

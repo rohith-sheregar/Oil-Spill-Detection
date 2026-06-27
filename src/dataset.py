@@ -2,7 +2,7 @@ import os
 import numpy as np
 from PIL import Image
 import torch
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, random_split, ConcatDataset
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import config
@@ -22,6 +22,9 @@ def get_transforms(train=True):
         A.Normalize(mean=(0.5, 0.5), std=(0.5, 0.5)),
         ToTensorV2(),
     ])
+
+
+# ── SOS Dataset (binary: oil vs background) ──────────────────────────────────
 
 class SOSDataset(Dataset):
     def __init__(self, img_dir, mask_dir, transform=None):
@@ -56,22 +59,164 @@ class SOSDataset(Dataset):
 
         return image, mask.unsqueeze(0)
 
-def get_loaders(batch_size=config.BATCH_SIZE):
-    full_dataset = SOSDataset(
-        config.TRAIN_IMG_DIR,
-        config.TRAIN_MASK_DIR,
-        transform=get_transforms(train=True)
-    )
+
+# ── MKLab Dataset (5-class labels, converted to binary for Module 1) ─────────
+
+class MKLabDataset(Dataset):
+    """
+    MKLab Oil Spill Detection Dataset.
+
+    Labels (1D):
+        0 = Sea Surface
+        1 = Oil Spill
+        2 = Look-alike
+        3 = Ship
+        4 = Land
+
+    For binary segmentation (Module 1), only class 1 (Oil Spill) is treated as
+    the positive class; all other classes become background (0).
+    """
+
+    def __init__(self, img_dir, label_dir, transform=None, target_size=None):
+        self.img_dir = img_dir
+        self.label_dir = label_dir
+        self.transform = transform
+        self.target_size = target_size or config.IMAGE_SIZE
+
+        self.images = sorted([
+            f for f in os.listdir(img_dir)
+            if f.lower().endswith(('.jpg', '.png', '.tif', '.tiff'))
+        ])
+
+        # Build matching label filenames (.jpg images -> .png labels)
+        self.labels = []
+        for img_name in self.images:
+            base = os.path.splitext(img_name)[0]
+            label_name = base + ".png"
+            label_path = os.path.join(label_dir, label_name)
+            if os.path.exists(label_path):
+                self.labels.append(label_name)
+            else:
+                raise FileNotFoundError(
+                    f"Label file not found for image '{img_name}': {label_path}"
+                )
+
+    def __len__(self):
+        return len(self.images)
+
+    def __repr__(self):
+        return f"MKLabDataset(samples={len(self.images)})"
+
+    def __getitem__(self, idx):
+        img_name = self.images[idx]
+        label_name = self.labels[idx]
+
+        img_path = os.path.join(self.img_dir, img_name)
+        label_path = os.path.join(self.label_dir, label_name)
+
+        # Load image (RGB)
+        image = np.array(
+            Image.open(img_path).convert("RGB").resize(
+                (self.target_size, self.target_size), Image.BILINEAR
+            )
+        )
+
+        # Load 1D label and resize with NEAREST to preserve class IDs
+        label = np.array(
+            Image.open(label_path).convert("L").resize(
+                (self.target_size, self.target_size), Image.NEAREST
+            )
+        )
+
+        # Convert to binary mask: Oil Spill (class 1) = 1, everything else = 0
+        mask = (label == 1).astype(np.float32)
+
+        if self.transform:
+            augmented = self.transform(image=image, mask=mask)
+            image = augmented["image"]
+            mask = augmented["mask"]
+            return image, mask.unsqueeze(0)
+
+        # No transform: convert numpy to tensor manually
+        image = torch.from_numpy(image.transpose(2, 0, 1).astype(np.float32) / 255.0)
+        mask = torch.from_numpy(mask).unsqueeze(0)
+        return image, mask
+
+
+# ── Loader factory ────────────────────────────────────────────────────────────
+
+def get_loaders(batch_size=config.BATCH_SIZE, dataset=None):
+    """
+    Create train/val/test DataLoaders.
+
+    Args:
+        batch_size: Batch size for loaders.
+        dataset:    Override config.DATASET. Options: "sos", "mklab", "combined".
+
+    Returns:
+        Tuple of (train_loader, val_loader, test_loader).
+    """
+    ds_choice = dataset or config.DATASET
+
+    if ds_choice == "sos":
+        full_dataset = SOSDataset(
+            config.TRAIN_IMG_DIR,
+            config.TRAIN_MASK_DIR,
+            transform=get_transforms(train=True)
+        )
+        test_ds = SOSDataset(
+            config.TEST_IMG_DIR,
+            config.TEST_MASK_DIR,
+            transform=get_transforms(train=False)
+        )
+
+    elif ds_choice == "mklab":
+        full_dataset = MKLabDataset(
+            config.MKLAB_TRAIN_IMG_DIR,
+            config.MKLAB_TRAIN_LABEL_DIR,
+            transform=get_transforms(train=True),
+        )
+        test_ds = MKLabDataset(
+            config.MKLAB_TEST_IMG_DIR,
+            config.MKLAB_TEST_LABEL_DIR,
+            transform=get_transforms(train=False),
+        )
+
+    elif ds_choice == "combined":
+        sos_train = SOSDataset(
+            config.TRAIN_IMG_DIR,
+            config.TRAIN_MASK_DIR,
+            transform=get_transforms(train=True)
+        )
+        mklab_train = MKLabDataset(
+            config.MKLAB_TRAIN_IMG_DIR,
+            config.MKLAB_TRAIN_LABEL_DIR,
+            transform=get_transforms(train=True),
+        )
+        full_dataset = ConcatDataset([sos_train, mklab_train])
+
+        sos_test = SOSDataset(
+            config.TEST_IMG_DIR,
+            config.TEST_MASK_DIR,
+            transform=get_transforms(train=False)
+        )
+        mklab_test = MKLabDataset(
+            config.MKLAB_TEST_IMG_DIR,
+            config.MKLAB_TEST_LABEL_DIR,
+            transform=get_transforms(train=False),
+        )
+        test_ds = ConcatDataset([sos_test, mklab_test])
+    else:
+        raise ValueError(f"Unknown dataset: '{ds_choice}'. Use 'sos', 'mklab', or 'combined'.")
+
+    # Train/val split
     val_size = int(len(full_dataset) * config.VAL_SPLIT)
     train_size = len(full_dataset) - val_size
     train_ds, val_ds = random_split(full_dataset, [train_size, val_size])
-    val_ds.dataset.transform = get_transforms(train=False)
 
-    test_ds = SOSDataset(
-        config.TEST_IMG_DIR,
-        config.TEST_MASK_DIR,
-        transform=get_transforms(train=False)
-    )
+    # For val set, disable training augmentations if it's a single dataset
+    if hasattr(full_dataset, 'transform'):
+        val_ds.dataset.transform = get_transforms(train=False)
 
     train_loader = DataLoader(
         train_ds, batch_size=batch_size, shuffle=True,
@@ -85,4 +230,8 @@ def get_loaders(batch_size=config.BATCH_SIZE):
         test_ds, batch_size=batch_size, shuffle=False,
         num_workers=config.NUM_WORKERS, pin_memory=config.PIN_MEMORY
     )
+
+    print(f"Dataset: {ds_choice.upper()}")
+    print(f"  Train: {train_size} | Val: {val_size} | Test: {len(test_ds)}")
+
     return train_loader, val_loader, test_loader
