@@ -29,9 +29,9 @@ MKLAB_TEST_LABEL_DIR = os.path.join(MKLAB_DIR, "test", "labels_1D")
 CHECKPOINT_DIR = os.path.join(BASE_DIR, "outputs", "checkpoints")
 PRED_DIR = os.path.join(BASE_DIR, "outputs", "predictions")
 
-IMAGE_SIZE = 256
-BATCH_SIZE = 8
-NUM_EPOCHS = 50
+IMAGE_SIZE = 512
+BATCH_SIZE = 4
+NUM_EPOCHS = 60
 LEARNING_RATE = 2e-4
 NUM_WORKERS = 2
 PIN_MEMORY = True

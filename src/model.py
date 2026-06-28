@@ -1,69 +1,91 @@
 import torch
 import torch.nn as nn
-import torchvision.models.segmentation as seg_models
+import torch.nn.functional as F
+import segmentation_models_pytorch as smp
+import config
 
-class ChannelSE(nn.Module):
+
+class ScSEBlock(nn.Module):
+    """
+    Concurrent Spatial and Channel Squeeze-Excitation (scSE).
+    Roy et al. 2019 — preserved from original architecture.
+    """
     def __init__(self, channels, reduction=16):
         super().__init__()
-        self.pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Linear(channels, channels // reduction, bias=False),
-            nn.ReLU(),
-            nn.Linear(channels // reduction, channels, bias=False),
+        # Channel Squeeze-Excitation
+        self.cse = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(channels, max(channels // reduction, 4)),
+            nn.ReLU(inplace=True),
+            nn.Linear(max(channels // reduction, 4), channels),
+            nn.Sigmoid()
+        )
+        # Spatial Squeeze-Excitation
+        self.sse = nn.Sequential(
+            nn.Conv2d(channels, 1, kernel_size=1, bias=False),
             nn.Sigmoid()
         )
 
     def forward(self, x):
-        b, c, _, _ = x.shape
-        y = self.pool(x).view(b, c)
-        y = self.fc(y).view(b, c, 1, 1)
-        return x * y
+        b, c, h, w = x.shape
+        cse_w = self.cse(x).view(b, c, 1, 1)
+        sse_w = self.sse(x)
+        return (cse_w * x) + (sse_w * x)
 
-class SpatialSE(nn.Module):
-    def __init__(self, channels):
+
+class OilSpillModel(nn.Module):
+    """
+    DeepLabV3+ with EfficientNet-B4 encoder + scSE attention.
+    Replaces MobileNetV3-Large backbone for higher accuracy.
+    EfficientNet-B4: 19M params vs MobileNetV3: 11M params.
+    Compound scaling gives better feature extraction at minimal cost.
+    """
+    def __init__(self):
         super().__init__()
-        self.conv = nn.Conv2d(channels, 1, kernel_size=1)
-        self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
-        y = self.sigmoid(self.conv(x))
-        return x * y
-
-class scSEBlock(nn.Module):
-    def __init__(self, channels, reduction=16):
-        super().__init__()
-        self.cse = ChannelSE(channels, reduction)
-        self.sse = SpatialSE(channels)
-
-    def forward(self, x):
-        return self.cse(x) + self.sse(x)
-
-class OilSpillDeepLab(nn.Module):
-    def __init__(self, num_classes=1):
-        super().__init__()
-        base = seg_models.deeplabv3_mobilenet_v3_large(
-            weights="DEFAULT"
+        # EfficientNet-B4 backbone with DeepLabV3+ decoder
+        self.base = smp.DeepLabV3Plus(
+            encoder_name="efficientnet-b4",
+            encoder_weights="imagenet",
+            in_channels=3,
+            classes=256,          # output features, not final classes
+            activation=None,
+            decoder_atrous_rates=(6, 12, 18),
         )
-        self.backbone = base.backbone
-        self.classifier = base.classifier
-        self.classifier[-1] = nn.Conv2d(256, num_classes, kernel_size=1)
-        self.scse = scSEBlock(channels=960)
-        self.upsample = nn.Upsample(scale_factor=16, mode='bilinear', align_corners=True)
+
+        # scSE on top of decoder output
+        self.scse = ScSEBlock(channels=256, reduction=16)
+
+        # Final classification head
+        self.head = nn.Sequential(
+            nn.Conv2d(256, 64, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Dropout2d(p=0.1),
+            nn.Conv2d(64, 1, kernel_size=1),
+        )
 
     def forward(self, x):
         input_size = x.shape[-2:]
-        features = self.backbone(x)
-        high = features.get("out", features.get("high", None))
-        if high is None:
-            # Fallback if dictionary keys are different
-            high = list(features.values())[-1]
-        high = self.scse(high)
-        out = self.classifier(high)
-        out = nn.functional.interpolate(
-            out, size=input_size, mode='bilinear', align_corners=True
+
+        # Encoder + decoder
+        features = self.base(x)                     # (B, 256, H/4, W/4)
+
+        # scSE attention
+        features = self.scse(features)
+
+        # Classification head
+        logits = self.head(features)                # (B, 1, H/4, W/4)
+
+        # Upsample to input resolution
+        logits = F.interpolate(
+            logits, size=input_size,
+            mode='bilinear', align_corners=False
         )
-        return out
+        return torch.sigmoid(logits)
+
 
 def get_model(device):
-    model = OilSpillDeepLab(num_classes=1)
+    model = OilSpillModel()
     return model.to(device)
