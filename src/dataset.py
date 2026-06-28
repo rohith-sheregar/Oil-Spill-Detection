@@ -82,6 +82,7 @@ class MKLabDataset(Dataset):
         self.label_dir = label_dir
         self.transform = transform
         self.target_size = target_size or config.IMAGE_SIZE
+        self.is_train = transform is not None
 
         self.images = sorted([
             f for f in os.listdir(img_dir)
@@ -114,31 +115,52 @@ class MKLabDataset(Dataset):
         img_path = os.path.join(self.img_dir, img_name)
         label_path = os.path.join(self.label_dir, label_name)
 
-        # Load image (RGB)
-        image = np.array(
-            Image.open(img_path).convert("RGB").resize(
-                (self.target_size, self.target_size), Image.BILINEAR
-            )
-        )
-
-        # Load 1D label and resize with NEAREST to preserve class IDs
+        # Load full resolution — NO resize here anymore
+        image = np.array(Image.open(img_path).convert("RGB"))
         label = np.array(
             Image.open(label_path).convert("L").resize(
-                (self.target_size, self.target_size), Image.NEAREST
+                (image.shape[1], image.shape[0]), Image.NEAREST
             )
         )
 
-        # Convert to binary mask: Oil Spill (class 1) = 1, everything else = 0
+        # Convert to binary mask first
         mask = (label == 1).astype(np.float32)
+
+        # Random or Center crop 256x256 from full resolution image
+        h, w = image.shape[:2]
+        if h > self.target_size and w > self.target_size:
+            if self.is_train:
+                # Random crop for training
+                top  = np.random.randint(0, h - self.target_size)
+                left = np.random.randint(0, w - self.target_size)
+            else:
+                # Centre crop for val/test — reproducible
+                top  = (h - self.target_size) // 2
+                left = (w - self.target_size) // 2
+            image = image[top:top+self.target_size, left:left+self.target_size]
+            mask  = mask[top:top+self.target_size,  left:left+self.target_size]
+        else:
+            # Fallback: if image smaller than 256, resize as before
+            image = np.array(
+                Image.fromarray(image).resize(
+                    (self.target_size, self.target_size), Image.BILINEAR
+                )
+            )
+            mask = np.array(
+                Image.fromarray(mask).resize(
+                    (self.target_size, self.target_size), Image.NEAREST
+                )
+            )
 
         if self.transform:
             augmented = self.transform(image=image, mask=mask)
             image = augmented["image"]
-            mask = augmented["mask"]
+            mask  = augmented["mask"]
             return image, mask.unsqueeze(0)
 
-        # No transform: convert numpy to tensor manually
-        image = torch.from_numpy(image.transpose(2, 0, 1).astype(np.float32) / 255.0)
+        image = torch.from_numpy(
+            image.transpose(2, 0, 1).astype(np.float32) / 255.0
+        )
         mask = torch.from_numpy(mask).unsqueeze(0)
         return image, mask
 
