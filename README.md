@@ -226,6 +226,7 @@ Output: 256×256×1 binary mask (sigmoid threshold 0.5)
 | **BCE + Soft Dice loss** | BCE only | Handles severe class imbalance (~95% background pixels) |
 | **Label smoothing ε=0.1** | Hard binary labels | Reduces overconfidence on noisy SAR annotations |
 | **CLAHE augmentation** | Standard contrast | Handles SAR contrast variation across acquisition geometries |
+| **Random Cropping** | Resizing | Preserves original high-res detail and physical aspect ratio of 1250x650 MKLab images by randomly extracting 256x256 windows. |
 | **Gradient clipping (norm=1.0)** | None | Prevents loss spikes with combined datasets |
 
 ### Datasets
@@ -276,7 +277,7 @@ Scheduler  : CosineAnnealingLR (T_max=30)
 Loss       : BCE + Soft Dice (50/50)
 Batch size : 8
 Epochs     : 30
-Image size : 256x256 (resized from 1250x650)
+Image size : 256x256 (random crop from 1250x650)
 Dataset    : MKLab (852 train / 150 val / 110 test)
 Status     : Pending training run
 ```
