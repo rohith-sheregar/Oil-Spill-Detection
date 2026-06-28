@@ -83,7 +83,7 @@ class OilSpillModel(nn.Module):
             logits, size=input_size,
             mode='bilinear', align_corners=False
         )
-        return torch.sigmoid(logits)
+        return logits
 
 
 def get_model(device):

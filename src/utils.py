@@ -8,9 +8,9 @@ def focal_loss(preds, targets, gamma=2.0, alpha=0.25, eps=1e-6):
     Focal Loss — forces model to focus on hard examples (thin streak edges).
     gamma=2 is standard; higher values = more focus on hard cases.
     """
-    preds = preds.clamp(eps, 1 - eps)
-    bce = F.binary_cross_entropy(preds, targets, reduction='none')
-    p_t = preds * targets + (1 - preds) * (1 - targets)
+    bce = F.binary_cross_entropy_with_logits(preds, targets, reduction='none')
+    probs = torch.sigmoid(preds)
+    p_t = probs * targets + (1 - probs) * (1 - targets)
     focal_weight = alpha * (1 - p_t) ** gamma
     return (focal_weight * bce).mean()
 
@@ -21,9 +21,10 @@ def tversky_loss(preds, targets, alpha=0.3, beta=0.7, eps=1e-6):
     alpha=0.3, beta=0.7 means missing oil pixels (FN) is penalised
     2.3x more than false alarms (FP). Critical for sparse oil spill pixels.
     """
-    tp = (preds * targets).sum(dim=(2, 3))
-    fp = (preds * (1 - targets)).sum(dim=(2, 3))
-    fn = ((1 - preds) * targets).sum(dim=(2, 3))
+    probs = torch.sigmoid(preds)
+    tp = (probs * targets).sum(dim=(2, 3))
+    fp = (probs * (1 - targets)).sum(dim=(2, 3))
+    fn = ((1 - probs) * targets).sum(dim=(2, 3))
     tversky = (tp + eps) / (tp + alpha * fp + beta * fn + eps)
     return (1 - tversky).mean()
 
@@ -44,14 +45,16 @@ def bce_dice_loss(preds, targets):
 
 
 def dice_score(preds, targets, threshold=0.5, eps=1e-6):
-    preds = (preds > threshold).float()
+    probs = torch.sigmoid(preds)
+    preds = (probs > threshold).float()
     intersection = (preds * targets).sum(dim=(2, 3))
     return ((2 * intersection + eps) /
             (preds.sum(dim=(2, 3)) + targets.sum(dim=(2, 3)) + eps)).mean()
 
 
 def iou_score(preds, targets, threshold=0.5, eps=1e-6):
-    preds = (preds > threshold).float()
+    probs = torch.sigmoid(preds)
+    preds = (probs > threshold).float()
     intersection = (preds * targets).sum(dim=(2, 3))
     union = (preds + targets - preds * targets).sum(dim=(2, 3))
     return ((intersection + eps) / (union + eps)).mean()
