@@ -202,10 +202,10 @@ oil-spill-sar-detection/
 
 ### Model Architecture
 ```
-Input: 256×256×3 SAR image (grayscale repeated to RGB)
+Input: 512×512×3 SAR image (grayscale repeated to RGB)
   ↓
-MobileNetV3-Large Backbone (pretrained on ImageNet)
-  11,136,498 total parameters
+EfficientNet-B4 Backbone (pretrained on ImageNet)
+  ~19M total parameters
   ↓
 scSE Attention Block (novel contribution)
   ├── Channel Squeeze-and-Excitation (which features matter)
@@ -213,17 +213,18 @@ scSE Attention Block (novel contribution)
   ↓
 DeepLabv3+ ASPP Classifier Head
   ↓
-Bilinear Upsample → 256×256
+Bilinear Upsample → 512×512
   ↓
-Output: 256×256×1 binary mask (sigmoid threshold 0.5)
+Output: 512×512×1 binary mask (sigmoid threshold 0.5)
 ```
 
 ### Design Choices
 | Design Choice | Alternative | Reason |
 |---|---|---|
-| **MobileNetV3-Large** backbone | ResNet-50, Xception | Mobile-class: 11M params vs 25M, faster CPU inference |
+| **EfficientNet-B4** backbone | MobileNetV3 | Compound scaling captures finer features at 512x512 resolution |
 | **scSE attention** | No attention | Focuses on oil-relevant channels + spatial regions simultaneously |
-| **BCE + Soft Dice loss** | BCE only | Handles severe class imbalance (~95% background pixels) |
+| **Focal + Tversky loss** | BCE + Dice | Tversky penalises missed oil pixels (FN) 2.3× more than false alarms |
+| **Mixed Precision + Warm Restarts** | Standard training | Escapes local minima and fits larger 512x512 batches into GPU memory |
 | **Label smoothing ε=0.1** | Hard binary labels | Reduces overconfidence on noisy SAR annotations |
 | **CLAHE augmentation** | Standard contrast | Handles SAR contrast variation across acquisition geometries |
 | **Random Cropping** | Resizing | Preserves original high-res detail and physical aspect ratio of 1250x650 MKLab images by randomly extracting 256x256 windows. |
@@ -270,17 +271,28 @@ Dataset    : Sentinel only (2,851 train samples)
 Best epoch : 11  ->  Val IoU 0.6662,  Test IoU 0.6409
 ```
 
-#### MKLab Training (Current)
+#### EfficientNet-B4 Training (Targeting 0.8+ IoU)
 ```
-Optimizer  : AdamW  (lr=2e-4)
-Scheduler  : CosineAnnealingLR (T_max=30)
-Loss       : BCE + Soft Dice (50/50)
-Batch size : 8
-Epochs     : 30
-Image size : 256x256 (random crop from 1250x650)
-Dataset    : MKLab (852 train / 150 val / 110 test)
-Status     : Pending training run
+Optimizer  : AdamW  (lr=2e-4, mixed precision scaler)
+Scheduler  : CosineAnnealingWarmRestarts (T_0=20, freeze first 5 epochs)
+Loss       : Focal (0.4) + Tversky (0.6)
+Batch size : 4
+Epochs     : 60
+Image size : 512x512 (random crop from 1250x650)
+Dataset    : All 3 combined (SOS Sentinel + PALSAR + MKLab)
+Status     : Training in progress...
 ```
+
+### Module 1 Results Progression
+
+| Run | Dataset | Strategy | Best Val IoU | Best Val Dice |
+|-----|---------|----------|----------|-----------|
+| Run 1 | SOS only | Resize (256x256) | 0.6409 | 0.7509 |
+| Run 2 | MKLab only | Resize (256x256) | 0.4062 | 0.5139 |
+| Run 3 | All 3 combined | Resize (256x256) | 0.5944 | 0.7068 |
+| **Run 4** | **All 3 combined** | **Random Crop (256x256)** | **0.6479** | **0.7492** |
+
+> *Note: Run 4 successfully restored baseline performance while training on a significantly harder, multi-sensor dataset with real look-alike labels.*
 
 ---
 
