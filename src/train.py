@@ -78,8 +78,8 @@ def run_training():
         lr=config.LEARNING_RATE,
         weight_decay=1e-4
     )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=20, T_mult=2, eta_min=1e-6
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=config.NUM_EPOCHS - 5, eta_min=1e-6
     )
 
     best_iou = 0
@@ -95,8 +95,8 @@ def run_training():
                 lr=config.LEARNING_RATE / 5,  # lower LR for fine-tuning encoder
                 weight_decay=1e-4
             )
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-                optimizer, T_0=20, T_mult=2, eta_min=1e-6
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=config.NUM_EPOCHS - 5, eta_min=1e-6
             )
 
         train_loss = train_one_epoch(model, train_loader, optimizer, device)
@@ -119,6 +119,7 @@ def run_training():
             print(f"  → Saved best model (IoU: {best_iou:.4f})")
 
     print(f"\nTraining complete. Best Val IoU: {best_iou:.4f}")
+    return best_iou
 
 
 def run_training_with_loaders(train_loader, val_loader, test_loader=None):
@@ -135,8 +136,8 @@ def run_training_with_loaders(train_loader, val_loader, test_loader=None):
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=config.LEARNING_RATE, weight_decay=1e-4
     )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=20, T_mult=2, eta_min=1e-6
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=config.NUM_EPOCHS - 5, eta_min=1e-6
     )
 
     best_iou = 0
@@ -149,8 +150,8 @@ def run_training_with_loaders(train_loader, val_loader, test_loader=None):
                 model.parameters(),
                 lr=config.LEARNING_RATE / 5, weight_decay=1e-4
             )
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-                optimizer, T_0=20, T_mult=2, eta_min=1e-6
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=config.NUM_EPOCHS - 5, eta_min=1e-6
             )
 
         train_loss = train_one_epoch(model, train_loader, optimizer, device)
@@ -173,6 +174,7 @@ def run_training_with_loaders(train_loader, val_loader, test_loader=None):
             print(f"  → Saved best model (IoU: {best_iou:.4f})")
 
     print(f"\nTraining complete. Best Val IoU: {best_iou:.4f}")
+    return best_iou
 
 if __name__ == "__main__":
     run_training()

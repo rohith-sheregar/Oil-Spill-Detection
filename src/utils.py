@@ -15,7 +15,7 @@ def focal_loss(preds, targets, gamma=2.0, alpha=0.25, eps=1e-6):
     return (focal_weight * bce).mean()
 
 
-def tversky_loss(preds, targets, alpha=0.3, beta=0.7, eps=1e-6):
+def tversky_loss(preds, targets, alpha=0.4, beta=0.6, eps=1e-6):
     """
     Tversky Loss — penalises False Negatives more than False Positives.
     alpha=0.3, beta=0.7 means missing oil pixels (FN) is penalised
