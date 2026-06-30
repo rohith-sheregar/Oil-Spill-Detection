@@ -89,3 +89,58 @@ class OilSpillModel(nn.Module):
 def get_model(device):
     model = OilSpillModel()
     return model.to(device)
+
+
+# ── V1 Model (MobileNetV3-Large backbone) — kept for checkpoint comparison ───
+
+class OilSpillModelV1(nn.Module):
+    """
+    Original DeepLabV3+ with MobileNetV3-Large encoder + scSE attention.
+    Used in Run 1-4 (baseline). Preserved here to allow loading old checkpoints
+    for side-by-side comparison with OilSpillModel (EfficientNet-B4).
+
+    Architecture:
+        MobileNetV3-Large backbone (~11M params, pretrained on ImageNet)
+        + scSE attention block
+        + DeepLabV3+ ASPP head
+    Input:  256×256×3
+    Output: 256×256×1 raw logits (apply sigmoid for probability)
+    """
+    def __init__(self):
+        super().__init__()
+
+        self.base = smp.DeepLabV3Plus(
+            encoder_name="mobilenet_v3_large",
+            encoder_weights="imagenet",
+            in_channels=3,
+            classes=256,
+            activation=None,
+            decoder_atrous_rates=(6, 12, 18),
+        )
+
+        self.scse = ScSEBlock(channels=256, reduction=16)
+
+        self.head = nn.Sequential(
+            nn.Conv2d(256, 64, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Dropout2d(p=0.1),
+            nn.Conv2d(64, 1, kernel_size=1),
+        )
+
+    def forward(self, x):
+        input_size = x.shape[-2:]
+        features = self.base(x)
+        features = self.scse(features)
+        logits = self.head(features)
+        logits = F.interpolate(
+            logits, size=input_size,
+            mode='bilinear', align_corners=False
+        )
+        return logits
+
+
+def get_model_v1(device):
+    """Load MobileNetV3-Large (V1) model. Use with old best_model.pth checkpoints."""
+    model = OilSpillModelV1()
+    return model.to(device)
