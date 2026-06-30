@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 import config
-from src.model import OilSpillDeepLab
+from src.model import OilSpillModel
 from src.utils import load_checkpoint
 from src.dataset import get_transforms
 from src.features import extract_features, describe_patch
@@ -25,7 +25,7 @@ from src.classifier import LookAlikeClassifier
 
 # ── Module 1 helpers ─────────────────────────────────────────────────────────
 
-def load_module1(checkpoint_path: str, device: str) -> OilSpillDeepLab:
+def load_module1(checkpoint_path: str, device: str) -> OilSpillModel:
     """
     Instantiate the DeepLabV3+ model and load pre-trained weights.
 
@@ -36,7 +36,7 @@ def load_module1(checkpoint_path: str, device: str) -> OilSpillDeepLab:
     Returns:
         Loaded model set to eval mode.
     """
-    model = OilSpillDeepLab(num_classes=1).to(device)
+    model = OilSpillModel().to(device)
     load_checkpoint(checkpoint_path, model)
     model.eval()
     return model
