@@ -110,7 +110,7 @@ class OilSpillModelV1(nn.Module):
         super().__init__()
 
         self.base = smp.DeepLabV3Plus(
-            encoder_name="mobilenet_v3_large",
+            encoder_name="timm-mobilenetv3_large_100",
             encoder_weights="imagenet",
             in_channels=3,
             classes=256,
