@@ -93,51 +93,76 @@ def get_model(device):
 
 # ── V1 Model (MobileNetV3-Large backbone) — kept for checkpoint comparison ───
 
+class OldCSE(nn.Module):
+    def __init__(self, channels, reduction=16):
+        super().__init__()
+        self.fc = nn.Sequential(
+            nn.Linear(channels, max(channels // reduction, 4), bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(max(channels // reduction, 4), channels, bias=False),
+            nn.Sigmoid()
+        )
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = F.adaptive_avg_pool2d(x, 1).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y
+
+
+class OldSSE(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.conv = nn.Conv2d(channels, 1, kernel_size=1, bias=True)
+    def forward(self, x):
+        return x * torch.sigmoid(self.conv(x))
+
+
+class OldScSEBlock(nn.Module):
+    def __init__(self, channels, reduction=16):
+        super().__init__()
+        self.cse = OldCSE(channels, reduction)
+        self.sse = OldSSE(channels)
+    def forward(self, x):
+        return self.cse(x) + self.sse(x)
+
+
 class OilSpillModelV1(nn.Module):
     """
     Original DeepLabV3+ with MobileNetV3-Large encoder + scSE attention.
-    Used in Run 1-4 (baseline). Preserved here to allow loading old checkpoints
-    for side-by-side comparison with OilSpillModel (EfficientNet-B4).
+    Built using torchvision (NOT smp), matching the exact saved key structure:
+      backbone.*   (MobileNetV3-Large feature extractor)
+      classifier.* (DeepLabHead ASPP)
+      scse.*       (custom scSE block applied on backbone output)
+    This matches old best_model.pth checkpoints from Run 1-4.
 
-    Architecture:
-        MobileNetV3-Large backbone (~11M params, pretrained on ImageNet)
-        + scSE attention block
-        + DeepLabV3+ ASPP head
-    Input:  256×256×3
-    Output: 256×256×1 raw logits (apply sigmoid for probability)
+    Input:  256x256x3
+    Output: 256x256x1 raw logits
     """
     def __init__(self):
         super().__init__()
 
-        self.base = smp.DeepLabV3Plus(
-            encoder_name="timm-mobilenetv3_large_100",
-            encoder_weights="imagenet",
-            in_channels=3,
-            classes=256,
-            activation=None,
-            decoder_atrous_rates=(6, 12, 18),
-        )
+        from torchvision.models.segmentation import deeplabv3_mobilenet_v3_large
 
-        self.scse = ScSEBlock(channels=256, reduction=16)
+        # Initialize the base torchvision model (outputs 1 class)
+        base = deeplabv3_mobilenet_v3_large(weights=None, num_classes=1)
 
-        self.head = nn.Sequential(
-            nn.Conv2d(256, 64, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.Dropout2d(p=0.1),
-            nn.Conv2d(64, 1, kernel_size=1),
-        )
+        self.backbone   = base.backbone
+        self.classifier = base.classifier
+        
+        # scSE in the old architecture was applied on the 960-channel backbone output
+        self.scse = OldScSEBlock(channels=960, reduction=16)
 
     def forward(self, x):
         input_size = x.shape[-2:]
-        features = self.base(x)
-        features = self.scse(features)
-        logits = self.head(features)
-        logits = F.interpolate(
-            logits, size=input_size,
+        features = self.backbone(x)
+        out = features['out']
+        out = self.scse(out)
+        out = self.classifier(out)
+        out = F.interpolate(
+            out, size=input_size,
             mode='bilinear', align_corners=False
         )
-        return logits
+        return out
 
 
 def get_model_v1(device):
