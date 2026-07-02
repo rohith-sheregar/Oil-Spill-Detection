@@ -48,7 +48,15 @@ def visualize_predictions(backbone="efficientnet", num_samples=5):
     for col, title in enumerate(col_titles):
         axes[0][col].set_title(title, fontsize=12, fontweight="bold", pad=10)
 
-    sample_indices = np.linspace(0, len(dataset) - 1, num_samples, dtype=int)
+    # Test dataset sizes: Sentinel (839), PALSAR (776), MKLab (110)
+    # Total = 1725. Let's explicitly pick 2 SOS (1 Sentinel, 1 PALSAR) and 3 MKLab images.
+    sample_indices = [
+        100,           # Sentinel-1 (SOS)
+        1000,          # PALSAR (SOS)
+        1630,          # MKLab (Look-alike heavily present here)
+        1670,          # MKLab
+        1710           # MKLab
+    ]
 
     for row, idx in enumerate(sample_indices):
         image, mask = dataset[idx]
