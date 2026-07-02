@@ -11,6 +11,7 @@ def get_transforms(train=True):
     if train:
         return A.Compose([
             A.Resize(config.IMAGE_SIZE, config.IMAGE_SIZE),
+            A.CLAHE(clip_limit=2.0, tile_grid_size=(8, 8), p=0.3),
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.RandomRotate90(p=0.5),
@@ -21,6 +22,7 @@ def get_transforms(train=True):
         ])
     return A.Compose([
         A.Resize(config.IMAGE_SIZE, config.IMAGE_SIZE),
+        A.CLAHE(clip_limit=2.0, tile_grid_size=(8, 8), p=1.0), # Apply CLAHE deterministically on eval
         A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
         ToTensorV2(),
     ])
