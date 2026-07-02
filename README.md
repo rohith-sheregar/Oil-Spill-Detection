@@ -49,8 +49,9 @@ Sentinel-1 SAR Input
 Output: Spill Map + Vessel ID + Confidence Score
 ```
 
-## 📊 Final Evaluation Results (Modules 1 & 2)
+## 📊 Pipeline Evaluation & Results
 
+### Modules 1 & 2: Segmentation and Look-alike Rejection
 After upgrading our architecture and testing on a combined dataset (SOS + MKLab), we evaluated our baseline model (MobileNetV3) against our final model (EfficientNet-B4) across 949 test images.
 
 | Backbone Model | M1 IoU | M1 Dice | M2 Precision | M2 Recall | Pipeline F1 |
@@ -60,6 +61,21 @@ After upgrading our architecture and testing on a combined dataset (SOS + MKLab)
 
 **🏆 Conclusion:**
 **EfficientNet-B4** is our final selected model. It achieved a massive **+6.7% improvement in segmentation accuracy (IoU)** by effectively detecting thin, broken oil streaks that the baseline missed. The Look-alike Classifier (Module 2) acts as a strict filter, maintaining an exceptional ~94% Precision in rejecting natural look-alikes.
+
+### Module 3: AIS Vessel Filtering
+We validated Module 3 using real historical AIS data from **MarineCadastre.gov** for the **Galveston/Houston Ship Channel** (August 3-4, 2022).
+
+| Metric | Value |
+|:---|---:|
+| Total AIS records processed | 217,792 |
+| After spatial/temporal filter | 56,600 |
+| After vessel type filter | 4,194 |
+| After DBSCAN trajectory cleaning | 3,179 |
+| Unique vessels analysed | 21 |
+| Tier-1 candidates identified | 2 |
+| **Top suspect** | **GASCHEM CARIBIC (tanker, score 0.636)** |
+
+The Isolation Forest anomaly scoring successfully pinpointed the top suspect based on extreme course deviations and speed variances near the spill site.
 
 ---
 
