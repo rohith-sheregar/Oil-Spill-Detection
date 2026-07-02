@@ -78,7 +78,8 @@ def predict_on_test_set():
                 mask=result["mask"], 
                 features=result["features"], 
                 predictions=result["predictions"], 
-                save_path=save_path
+                save_path=save_path,
+                gt_mask=result.get("gt_mask", None)
             )
         except Exception as e:
             print(f"Error processing {fname}: {e}")

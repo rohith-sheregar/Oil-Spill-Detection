@@ -17,11 +17,9 @@ def visualize_predictions(num_samples=5):
     )
     model.eval()
 
-    dataset = SOSDataset(
-        config.TEST_IMG_DIR,
-        config.TEST_MASK_DIR,
-        transform=get_transforms(train=False)
-    )
+    from src.dataset import get_loaders
+    _, _, test_loader = get_loaders(config.DATASET, batch_size=1)
+    dataset = test_loader.dataset
 
     os.makedirs(config.PRED_DIR, exist_ok=True)
 

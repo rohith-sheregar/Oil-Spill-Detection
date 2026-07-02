@@ -126,27 +126,17 @@ def visualize_pipeline(
     features: list,
     predictions: list,
     save_path: str = None,
+    gt_mask: np.ndarray = None,
 ) -> None:
     """
-    Produce a 3-panel figure comparing SAR input, Module 1 mask, and Module 2 result.
-
-    Panel 0 — SAR Input (grayscale).
-    Panel 1 — Module 1 detection: red overlay on all detected pixels.
-    Panel 2 — Module 2 result:
-               • green  overlay → confirmed oil_spill patches
-               • orange overlay → rejected look_alike patches.
-
-    Args:
-        image:      Grayscale image array (H, W) uint8.
-        mask:       Binary mask array (H, W) float32.
-        features:   List of PatchFeatures from extract_features().
-        predictions:List of prediction dicts from LookAlikeClassifier.predict().
-        save_path:  If given, save the figure here at 150 dpi.
+    Produce a multi-panel figure comparing SAR input, Module 1 mask, Module 2 result, 
+    and optionally the Ground Truth label.
     """
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    num_panels = 4 if gt_mask is not None else 3
+    fig, axes = plt.subplots(1, num_panels, figsize=(6 * num_panels, 6))
     fig.suptitle(
-        "Oil Spill Pipeline — Module 1 Detection → Module 2 Classification",
-        fontsize=13, fontweight="bold",
+        "Oil Spill Pipeline — Detection & Classification vs Ground Truth",
+        fontsize=14, fontweight="bold",
     )
 
     gray_float = image.astype(np.float32) / 255.0
@@ -155,26 +145,45 @@ def visualize_pipeline(
     axes[0].imshow(gray_float, cmap="gray", vmin=0, vmax=1)
     axes[0].set_title("SAR Input", fontweight="bold")
     axes[0].axis("off")
+    
+    panel_idx = 1
+    
+    # ── Panel 1 (Optional): Ground Truth ──────────────────────────────────────
+    if gt_mask is not None:
+        axes[panel_idx].imshow(gray_float, cmap="gray", vmin=0, vmax=1)
+        overlay_gt = np.zeros((*gt_mask.shape, 4), dtype=np.float32)
+        
+        if np.max(gt_mask) > 1:
+            # MKLab 5-class mask
+            overlay_gt[gt_mask == 1] = [1.0, 0.0, 0.0, 0.55] # Real Oil
+            overlay_gt[gt_mask == 2] = [1.0, 0.55, 0.0, 0.55] # Look-alike
+        else:
+            # SOS binary mask
+            overlay_gt[gt_mask == 1] = [1.0, 0.0, 0.0, 0.55]
+            
+        axes[panel_idx].imshow(overlay_gt)
+        axes[panel_idx].set_title("Ground Truth Label", fontweight="bold")
+        axes[panel_idx].axis("off")
+        panel_idx += 1
 
-    # ── Panel 1: Module 1 detection (red overlay) ─────────────────────────────
-    axes[1].imshow(gray_float, cmap="gray", vmin=0, vmax=1)
+    # ── Panel 2: Module 1 detection (red overlay) ─────────────────────────────
+    axes[panel_idx].imshow(gray_float, cmap="gray", vmin=0, vmax=1)
     overlay_m1 = np.zeros((*mask.shape, 4), dtype=np.float32)
     overlay_m1[mask == 1] = [1.0, 0.0, 0.0, 0.55]
-    axes[1].imshow(overlay_m1)
-    axes[1].set_title("Module 1 — Detected Patches", fontweight="bold")
-    axes[1].axis("off")
+    axes[panel_idx].imshow(overlay_m1)
+    axes[panel_idx].set_title("Module 1 — Detected Patches", fontweight="bold")
+    axes[panel_idx].axis("off")
+    panel_idx += 1
 
-    # ── Panel 2: Module 2 result ──────────────────────────────────────────────
-    axes[2].imshow(gray_float, cmap="gray", vmin=0, vmax=1)
+    # ── Panel 3: Module 2 result ──────────────────────────────────────────────
+    axes[panel_idx].imshow(gray_float, cmap="gray", vmin=0, vmax=1)
 
-    # Build per-pixel coloured overlay by rasterising each connected component
     overlay_m2 = np.zeros((*mask.shape, 4), dtype=np.float32)
     mask_u8 = (mask > 0).astype(np.uint8)
     num_labels, labels_map, stats, _ = cv2.connectedComponentsWithStats(
         mask_u8, connectivity=8
     )
 
-    # Build valid component list matching what extract_features produced
     valid_components = []
     for lid in range(1, num_labels):
         if stats[lid, cv2.CC_STAT_AREA] >= 50:
@@ -188,11 +197,11 @@ def visualize_pipeline(
                 colour = [0.0, 0.8, 0.2, 0.55]  # green
             else:
                 colour = [1.0, 0.55, 0.0, 0.55]  # orange
-            # Add confidence annotation at component centroid
+            
             ys, xs = np.where(comp_mask)
             cx, cy = int(xs.mean()), int(ys.mean())
             label_txt = f"{pred['label'][:3].upper()}\n{pred['confidence']:.2f}"
-            axes[2].text(
+            axes[panel_idx].text(
                 cx, cy, label_txt,
                 color="white", fontsize=6, ha="center", va="center",
                 bbox=dict(facecolor="black", alpha=0.4, pad=1, linewidth=0),
@@ -202,15 +211,15 @@ def visualize_pipeline(
 
         overlay_m2[comp_mask] = colour
 
-    axes[2].imshow(overlay_m2)
-    axes[2].set_title("Module 2 — Look-alike Rejection", fontweight="bold")
-    axes[2].axis("off")
+    axes[panel_idx].imshow(overlay_m2)
+    axes[panel_idx].set_title("Module 2 — Look-alike Rejection", fontweight="bold")
+    axes[panel_idx].axis("off")
 
     # ── Legend ────────────────────────────────────────────────────────────────
     legend_handles = [
-        mpatches.Patch(color=(1, 0, 0, 0.7),     label="M1 Detection"),
-        mpatches.Patch(color=(0, 0.8, 0.2, 0.7), label="Confirmed Oil"),
-        mpatches.Patch(color=(1, 0.55, 0, 0.7),  label="Look-alike Rejected"),
+        mpatches.Patch(color=(1, 0, 0, 0.7),     label="M1 / GT Oil"),
+        mpatches.Patch(color=(0, 0.8, 0.2, 0.7), label="M2 Confirmed Oil"),
+        mpatches.Patch(color=(1, 0.55, 0, 0.7),  label="M2 / GT Look-alike"),
     ]
     fig.legend(
         handles=legend_handles,
@@ -247,9 +256,27 @@ def run_pipeline(
 
     Returns:
         Dict with keys:
-            mask, features, predictions, n_detected, n_confirmed_oil, n_rejected
+            mask, features, predictions, n_detected, n_confirmed_oil, n_rejected, gt_mask
     """
     device = config.DEVICE
+
+    # ── Attempt to load Ground Truth ──────────────────────────────────────────
+    gt_mask = None
+    try:
+        if "sos" in image_path.lower():
+            label_path = image_path.replace(os.sep + "image" + os.sep, os.sep + "label" + os.sep)
+            if os.path.exists(label_path):
+                gt_img = np.array(Image.open(label_path).convert("L"))
+                gt_mask = (gt_img > 127).astype(np.float32)
+        elif "mklab" in image_path.lower():
+            label_path = image_path.replace(os.sep + "images" + os.sep, os.sep + "labels_1D" + os.sep)
+            label_path = os.path.splitext(label_path)[0] + ".png"
+            if os.path.exists(label_path):
+                # For MKLab we resize to image size and return raw 5-class mask
+                original_size = Image.open(image_path).size # (W, H)
+                gt_mask = np.array(Image.open(label_path).convert("L").resize(original_size, Image.NEAREST))
+    except Exception as e:
+        print(f"    (Could not load ground truth label: {e})")
 
     # ── Step 1: Load Module 1 ─────────────────────────────────────────────────
     print("🛰️  Loading Module 1 (DeepLabV3+ segmentation model)…")
@@ -324,6 +351,7 @@ def run_pipeline(
         "n_detected":       n_detected,
         "n_confirmed_oil":  n_confirmed_oil,
         "n_rejected":       n_rejected,
+        "gt_mask":          gt_mask,
     }
 
 
