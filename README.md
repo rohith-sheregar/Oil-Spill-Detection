@@ -77,36 +77,6 @@ After upgrading our architecture and testing on a combined dataset (SOS + MKLab)
 
 ---
 
-## 🖼️ Visual Results
-
-### End-to-End Pipeline (Module 1 + Module 2)
-The final pipeline correctly segments the oil spill (Module 1) and filters out natural ocean phenomena like low wind zones (Module 2).
-> **Legend:** Red = Ground Truth/M1 Detection | Green = Confirmed Oil | Orange = Rejected Look-alike
-![Pipeline Result](assets/pipeline_result.png)
-
-### Model Comparison (MobileNetV3 vs EfficientNet-B4)
-Our architectural upgrade to EfficientNet-B4 successfully captures much finer, fragmented oil streaks that the baseline MobileNet missed.
-**Baseline (MobileNetV3):**
-![MobileNet Baseline](assets/predictions_mobilenet.png)
-
-**Final Model (EfficientNet-B4):**
-![EfficientNet Upgrade](assets/predictions_efficientnet.png)
-
----
-
-## 👥 Team
-
-| Name | USN | Role |
-|---|---|---|
-| Rohith Sheregar | 4MW23CS120 | ML Pipeline, SAR Processing, AIS Integration |
-| Reynol D'Souza | 4MW23CS119 | Team Lead, System Architecture |
-| Prajwal Shanbhag | 4MW23CS095 | Data Processing, Evaluation |
-| Nishith R Poojary | 4MW23CS087 | Drift Modelling, Visualization |
-
-**Institution:** Shri Madhwa Vadiraja Institute of Technology and Management (VTU)
-
----
-
 ## ⚙️ Quick Start
 
 ```bash
@@ -140,6 +110,36 @@ python predict_pipeline.py --image data/sos/test/sentinel/image/0.png
 # Visualise raw Module 1 Predictions
 python -m src.visualize
 ```
+
+---
+
+## 🖼️ Visual Results
+
+### End-to-End Pipeline (Module 1 + Module 2)
+The final pipeline correctly segments the oil spill (Module 1) and filters out natural ocean phenomena like low wind zones (Module 2).
+> **Legend:** Red = Ground Truth/M1 Detection | Green = Confirmed Oil | Orange = Rejected Look-alike
+![Pipeline Result](assets/pipeline_result.png)
+
+### Model Comparison (MobileNetV3 vs EfficientNet-B4)
+Our architectural upgrade to EfficientNet-B4 successfully captures much finer, fragmented oil streaks that the baseline MobileNet missed.
+**Baseline (MobileNetV3):**
+![MobileNet Baseline](assets/predictions_mobilenet.png)
+
+**Final Model (EfficientNet-B4):**
+![EfficientNet Upgrade](assets/predictions_efficientnet.png)
+
+---
+
+## 👥 Team
+
+| Name | USN | Role |
+|---|---|---|
+| Rohith Sheregar | 4MW23CS120 | ML Pipeline, SAR Processing, AIS Integration |
+| Reynol D'Souza | 4MW23CS119 | Team Lead, System Architecture |
+| Prajwal Shanbhag | 4MW23CS095 | Data Processing, Evaluation |
+| Nishith R Poojary | 4MW23CS087 | Drift Modelling, Visualization |
+
+**Institution:** Shri Madhwa Vadiraja Institute of Technology and Management (VTU)
 
 ---
 
