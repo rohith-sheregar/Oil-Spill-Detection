@@ -100,6 +100,17 @@ venv\Scripts\activate          # Windows
 pip install -r requirements.txt
 ```
 
+### 📥 Data & Models Setup
+1. **Dataset**: Download the SOS & MKLab datasets from [Google Drive (Dataset)](https://drive.google.com/file/d/12grU_EAPbW75eyyHj-U5pOfnwQzm0MFw/view) and extract them into the `data/` folder.
+2. **Pre-trained Models**: Download the trained `.pth` and `.pkl` weights from [Google Drive (Models)](https://drive.google.com/drive/folders/1ybKpImQJs8WbQ1ZABUUoE5a8M-jEJLMC?usp=drive_link).
+3. Place the downloaded model files into the `outputs/checkpoints/` directory so they look exactly like this:
+```text
+outputs/checkpoints/
+├── best_model_efficientnet.pth
+├── best_model_mobilenet.pth
+└── module2_classifier.pkl
+```
+
 ### Key Commands
 
 ```bash
