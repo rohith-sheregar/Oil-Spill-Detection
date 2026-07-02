@@ -37,7 +37,7 @@ Sentinel-1 SAR Input
 └───────────────────────────────────────┘
         ↓  Confirmed spill + location
 ┌───────────────────────────────────────┐
-│  MODULE 3 — AIS Vessel Filtering      │  ❌ Planned
+│  MODULE 3 — AIS Vessel Filtering      │  ✅ Complete
 │  Isolation Forest + 3D DBSCAN         │
 └───────────────────────────────────────┘
         ↓  Ranked suspect vessels
@@ -74,6 +74,11 @@ After upgrading our architecture and testing on a combined dataset (SOS + MKLab)
 ### Module 2: Look-Alike Rejection
 * **Feature Extraction**: Extracts 13 geometric, morphological, and contextual features (e.g., area, elongation, compactness, standard deviation of intensity).
 * **Classifier**: Random Forest trained on real look-alike labels (MKLab dataset) to achieve > 90% precision.
+
+### Module 3: AIS Vessel Filtering
+* **Spatial/Temporal Filtering**: Applies a strict Haversine distance limit (50km radius) and ±6-hour window around the detected spill event.
+* **Trajectory Cleaning**: Normalises Latitude, Longitude, and Time data to run 3D DBSCAN clustering, efficiently erasing GPS noise and overlapping MMSI collisions.
+* **Anomaly Scoring**: Engineers 6 unique behavioural markers (Speed variance, course deviation, stop events, transit directionality, etc.) per vessel, ranking Tier-1 suspects using an unsupervised Isolation Forest model.
 
 ---
 
