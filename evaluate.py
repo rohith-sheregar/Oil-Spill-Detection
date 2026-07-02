@@ -173,20 +173,99 @@ def compute_m2_metrics(model, img_dir, label_dir, classifier, device, dataset_ty
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
+def evaluate_single_model(backbone, checkpoint_path, classifier, args, device):
+    print("\n" + "=" * 65)
+    print(f"  EVALUATING BACKBONE: {backbone.upper()}")
+    print("=" * 65)
+
+    print(f"\n[1/2] Loading Module 1 ({backbone})...")
+    if not os.path.exists(checkpoint_path):
+        print(f"  ERROR: Checkpoint not found at '{checkpoint_path}'")
+        return None
+
+    if backbone == "mobilenet":
+        model = OilSpillModelV1().to(device)
+        print("  → OilSpillModelV1 (MobileNetV3-Large, 256×256)")
+    else:
+        model = OilSpillModel().to(device)
+        print("  → OilSpillModel (EfficientNet-B4, 512×512)")
+
+    load_checkpoint(checkpoint_path, model)
+    model.eval()
+    print("  → Checkpoint loaded successfully")
+
+    print(f"\n[2/2] Running evaluation on test set...")
+    from src.dataset import get_loaders
+    _, _, test_loader = get_loaders(dataset=args.dataset)
+
+    m1_dice, m1_iou = compute_m1_metrics(model, test_loader, device)
+    
+    print("\n" + "─" * 65)
+    print(f"  MODULE 1 RESULTS  ({backbone.upper()})")
+    print("─" * 65)
+    print(f"  Test Dice  : {m1_dice:.4f}")
+    print(f"  Test IoU   : {m1_iou:.4f}")
+
+    results = {"m1_iou": m1_iou, "m1_dice": m1_dice, "m2_overall": None}
+
+    if not args.skip_m2 and classifier is not None:
+        datasets_to_eval = []
+        if args.dataset in ("sos", "combined"):
+            datasets_to_eval.append(("sos", config.TEST_IMG_DIR, config.TEST_MASK_DIR))
+        if args.dataset in ("mklab", "combined"):
+            datasets_to_eval.append(("mklab", config.MKLAB_TEST_IMG_DIR, config.MKLAB_TEST_LABEL_DIR))
+
+        all_tp, all_fp, all_tn, all_fn = 0, 0, 0, 0
+        for ds_name, img_dir, label_dir in datasets_to_eval:
+            if not os.path.isdir(img_dir):
+                continue
+            r = compute_m2_metrics(model, img_dir, label_dir, classifier, device, ds_name)
+            all_tp += r["tp"]; all_fp += r["fp"]
+            all_tn += r["tn"]; all_fn += r["fn"]
+
+        total = all_tp + all_fp + all_tn + all_fn
+        prec  = all_tp / (all_tp + all_fp + 1e-9)
+        rec   = all_tp / (all_tp + all_fn + 1e-9)
+        f1    = 2 * prec * rec / (prec + rec + 1e-9)
+        acc   = (all_tp + all_tn) / (total + 1e-9)
+        
+        results["m2_overall"] = {
+            "total": total, "tp": all_tp, "fp": all_fp, "tn": all_tn, "fn": all_fn,
+            "prec": prec, "rec": rec, "f1": f1, "acc": acc
+        }
+        
+        print("\n" + "─" * 65)
+        print(f"  MODULE 1 + MODULE 2 COMBINED RESULTS ({backbone.upper()})")
+        print("─" * 65)
+        print(f"  Images evaluated: {total}")
+        print(f"    TP={all_tp}  FP={all_fp}  TN={all_tn}  FN={all_fn}")
+        print(f"    Precision : {prec:.4f}")
+        print(f"    Recall    : {rec:.4f}")
+        print(f"    F1 Score  : {f1:.4f}")
+        print(f"    Accuracy  : {acc:.4f}")
+
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluate Module 1 + Module 2 pipeline on test set"
     )
     parser.add_argument(
         "--backbone",
-        choices=["mobilenet", "efficientnet"],
-        default="mobilenet",
-        help="Which Module 1 backbone to use (default: mobilenet)"
+        choices=["mobilenet", "efficientnet", "both"],
+        default="both",
+        help="Which Module 1 backbone to evaluate (default: both)"
     )
     parser.add_argument(
-        "--checkpoint",
-        default=os.path.join(config.CHECKPOINT_DIR, "best_model.pth"),
-        help="Path to Module 1 .pth checkpoint"
+        "--mobilenet-ckpt",
+        default=os.path.join(config.CHECKPOINT_DIR, "best_model_mobilenet.pth"),
+        help="Path to MobileNetV3 .pth checkpoint"
+    )
+    parser.add_argument(
+        "--efficientnet-ckpt",
+        default=os.path.join(config.CHECKPOINT_DIR, "best_model_efficientnet.pth"),
+        help="Path to EfficientNet-B4 .pth checkpoint"
     )
     parser.add_argument(
         "--classifier",
@@ -209,100 +288,47 @@ def main():
     device = config.DEVICE
     print("\n" + "=" * 65)
     print(f"  OIL SPILL PIPELINE EVALUATION")
-    print(f"  Backbone  : {args.backbone.upper()}")
-    print(f"  Checkpoint: {args.checkpoint}")
     print(f"  Dataset   : {args.dataset.upper()}")
     print(f"  Device    : {device}")
     print("=" * 65)
 
-    # ── Load Module 1 ──────────────────────────────────────────────────────────
-    print(f"\n[1/3] Loading Module 1 ({args.backbone})...")
-    if not os.path.exists(args.checkpoint):
-        print(f"  ERROR: Checkpoint not found at '{args.checkpoint}'")
-        print("  Place your best_model.pth in outputs/checkpoints/ and retry.")
-        return
-
-    if args.backbone == "mobilenet":
-        model = OilSpillModelV1().to(device)
-        print("  → OilSpillModelV1 (MobileNetV3-Large, 256×256)")
-    else:
-        model = OilSpillModel().to(device)
-        print("  → OilSpillModel (EfficientNet-B4, 512×512)")
-
-    load_checkpoint(args.checkpoint, model)
-    model.eval()
-    print("  → Checkpoint loaded successfully")
-
-    # ── Load Module 2 ──────────────────────────────────────────────────────────
     classifier = None
     if not args.skip_m2:
-        print(f"\n[2/3] Loading Module 2 classifier...")
         if not os.path.exists(args.classifier):
             print(f"  ERROR: Classifier not found at '{args.classifier}'")
-            print("  Run 'python train_module2.py' first.")
             return
         classifier = LookAlikeClassifier()
         classifier.load(args.classifier)
-        print("  → Classifier loaded successfully")
 
-    # ── Module 1 test set evaluation ───────────────────────────────────────────
-    print(f"\n[3/3] Running evaluation on test set...")
-    from src.dataset import get_loaders
+    configs = []
+    if args.backbone in ["mobilenet", "both"]:
+        configs.append(("mobilenet", args.mobilenet_ckpt))
+    if args.backbone in ["efficientnet", "both"]:
+        configs.append(("efficientnet", args.efficientnet_ckpt))
 
-    _, _, test_loader = get_loaders(dataset=args.dataset)
+    all_results = {}
+    for bb, ckpt in configs:
+        res = evaluate_single_model(bb, ckpt, classifier, args, device)
+        if res:
+            all_results[bb] = res
 
-    m1_dice, m1_iou = compute_m1_metrics(model, test_loader, device)
-
-    print("\n" + "─" * 65)
-    print(f"  MODULE 1 RESULTS  ({args.backbone.upper()})")
-    print("─" * 65)
-    print(f"  Test Dice  : {m1_dice:.4f}")
-    print(f"  Test IoU   : {m1_iou:.4f}")
-
-    # ── Module 1 + Module 2 combined evaluation ────────────────────────────────
-    if not args.skip_m2 and classifier is not None:
-        print("\n" + "─" * 65)
-        print(f"  MODULE 1 + MODULE 2 COMBINED RESULTS")
-        print("─" * 65)
-
-        datasets_to_eval = []
-        if args.dataset in ("sos", "combined"):
-            datasets_to_eval.append(("sos", config.TEST_IMG_DIR, config.TEST_MASK_DIR))
-        if args.dataset in ("mklab", "combined"):
-            datasets_to_eval.append(("mklab", config.MKLAB_TEST_IMG_DIR, config.MKLAB_TEST_LABEL_DIR))
-
-        all_tp, all_fp, all_tn, all_fn = 0, 0, 0, 0
-        for ds_name, img_dir, label_dir in datasets_to_eval:
-            if not os.path.isdir(img_dir):
-                print(f"  Skipping {ds_name.upper()} — directory not found: {img_dir}")
-                continue
-            r = compute_m2_metrics(model, img_dir, label_dir, classifier, device, ds_name)
-            print(f"\n  [{ds_name.upper()}] Images evaluated: {r['total']}")
-            print(f"    TP={r['tp']}  FP={r['fp']}  TN={r['tn']}  FN={r['fn']}")
-            print(f"    Precision : {r['precision']:.4f}")
-            print(f"    Recall    : {r['recall']:.4f}")
-            print(f"    F1 Score  : {r['f1']:.4f}")
-            print(f"    Accuracy  : {r['accuracy']:.4f}")
-            all_tp += r["tp"]; all_fp += r["fp"]
-            all_tn += r["tn"]; all_fn += r["fn"]
-
-        if len(datasets_to_eval) > 1:
-            total = all_tp + all_fp + all_tn + all_fn
-            prec  = all_tp / (all_tp + all_fp + 1e-9)
-            rec   = all_tp / (all_tp + all_fn + 1e-9)
-            f1    = 2 * prec * rec / (prec + rec + 1e-9)
-            acc   = (all_tp + all_tn) / (total + 1e-9)
-            print(f"\n  [COMBINED OVERALL] Images evaluated: {total}")
-            print(f"    Precision : {prec:.4f}")
-            print(f"    Recall    : {rec:.4f}")
-            print(f"    F1 Score  : {f1:.4f}")
-            print(f"    Accuracy  : {acc:.4f}")
-
-    print("\n" + "=" * 65)
-    print(f"  Backbone : {args.backbone.upper()}")
-    print(f"  M1 IoU   : {m1_iou:.4f}   |   M1 Dice : {m1_dice:.4f}")
-    print("=" * 65 + "\n")
-
+    # Print final comparison table
+    if len(all_results) > 0:
+        print("\n\n" + "═" * 70)
+        print("  FINAL COMPARISON SUMMARY")
+        print("═" * 70)
+        print(f"{'Model':<18} | {'M1 IoU':<8} | {'M2 Prec':<8} | {'M2 Recall':<9} | {'Pipeline F1'}")
+        print("─" * 70)
+        for bb, res in all_results.items():
+            m1_iou = f"{res['m1_iou']:.4f}"
+            if res["m2_overall"]:
+                prec = f"{res['m2_overall']['prec']:.4f}"
+                rec = f"{res['m2_overall']['rec']:.4f}"
+                f1 = f"{res['m2_overall']['f1']:.4f}"
+            else:
+                prec, rec, f1 = "N/A", "N/A", "N/A"
+            print(f"{bb.upper():<18} | {m1_iou:<8} | {prec:<8} | {rec:<9} | {f1}")
+        print("═" * 70 + "\n")
 
 if __name__ == "__main__":
     main()
