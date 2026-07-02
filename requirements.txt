@@ -10,6 +10,9 @@ opencv-python>=4.8.0
 # Module 2
 pickle5; python_version < "3.8"
 
+# Module 3
+pandas>=2.0.0
+
 # ---------------------------------------------------------
 # DATASET PLACEMENT
 # Please ensure your datasets are placed in the following
