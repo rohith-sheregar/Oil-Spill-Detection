@@ -8,24 +8,39 @@ from src.dataset import SOSDataset, get_transforms
 from src.model import get_model
 from src.utils import load_checkpoint, iou_score, dice_score
 
-def visualize_predictions(num_samples=5):
+import argparse
+import sys
+
+def visualize_predictions(backbone="efficientnet", num_samples=5):
     device = config.DEVICE
-    model = get_model(device)
-    load_checkpoint(
-        os.path.join(config.CHECKPOINT_DIR, "best_model.pth"),
-        model
-    )
+    
+    if backbone == "mobilenet":
+        from src.model import OilSpillModelV1
+        model = OilSpillModelV1().to(device)
+        model_name = "MobileNetV3-Large (Legacy)"
+        ckpt_path = os.path.join(config.CHECKPOINT_DIR, "best_model_mobilenet.pth")
+    else:
+        model = get_model(device)
+        model_name = "EfficientNet-B4 (Final)"
+        ckpt_path = os.path.join(config.CHECKPOINT_DIR, "best_model_efficientnet.pth")
+        
+    print(f"Loading {model_name} from {ckpt_path}...")
+    if not os.path.exists(ckpt_path):
+        print(f"❌ Checkpoint not found: {ckpt_path}")
+        sys.exit(1)
+        
+    load_checkpoint(ckpt_path, model)
     model.eval()
 
     from src.dataset import get_loaders
-    _, _, test_loader = get_loaders(config.DATASET, batch_size=1)
+    _, _, test_loader = get_loaders(batch_size=1, dataset=config.DATASET)
     dataset = test_loader.dataset
 
     os.makedirs(config.PRED_DIR, exist_ok=True)
 
     fig, axes = plt.subplots(num_samples, 3, figsize=(14, num_samples * 4.5))
     fig.suptitle(
-        "Oil Spill Detection — Module 1 Results\nDeepLabv3+ / MobileNetV2 + scSE Attention",
+        f"Oil Spill Detection — Module 1 Results\n{model_name}",
         fontsize=14, fontweight="bold", y=1.01
     )
 
@@ -66,7 +81,13 @@ def visualize_predictions(num_samples=5):
         # Column 1 — Ground Truth
         axes[row][1].imshow(sar_gray, cmap="gray")
         gt_overlay = np.zeros((*mask_np.shape, 4))
-        gt_overlay[mask_np == 1] = [1, 0, 0, 0.55]
+        # Handle MKLab vs SOS ground truth masks
+        if np.max(mask_np) > 1:
+            gt_overlay[mask_np == 1] = [1, 0, 0, 0.55]
+            gt_overlay[mask_np == 2] = [1, 0.55, 0, 0.55] # lookalike
+        else:
+            gt_overlay[mask_np == 1] = [1, 0, 0, 0.55]
+            
         axes[row][1].imshow(gt_overlay)
 
         # Column 2 — Prediction
@@ -79,20 +100,25 @@ def visualize_predictions(num_samples=5):
             axes[row][col].axis("off")
 
     # Legend
-    gt_patch   = mpatches.Patch(color=(1, 0, 0, 0.7),    label="Ground Truth (Red)")
+    gt_patch   = mpatches.Patch(color=(1, 0, 0, 0.7),    label="GT Oil (Red)")
+    la_patch   = mpatches.Patch(color=(1, 0.55, 0, 0.7), label="GT Lookalike (Orange)")
     pred_patch = mpatches.Patch(color=(0, 0.8, 1, 0.7),  label="Prediction (Cyan)")
     fig.legend(
-        handles=[gt_patch, pred_patch],
-        loc="lower center", ncol=2,
+        handles=[gt_patch, la_patch, pred_patch],
+        loc="lower center", ncol=3,
         fontsize=11, frameon=True,
         bbox_to_anchor=(0.5, -0.02)
     )
 
     plt.tight_layout()
-    save_path = os.path.join(config.PRED_DIR, "predictions.png")
+    save_path = os.path.join(config.PRED_DIR, f"predictions_{backbone}.png")
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
     print(f"Saved → {save_path}")
     plt.show()
 
 if __name__ == "__main__":
-    visualize_predictions()
+    parser = argparse.ArgumentParser(description="Visualize Module 1 predictions")
+    parser.add_argument("--backbone", type=str, default="efficientnet", choices=["mobilenet", "efficientnet"])
+    args = parser.parse_args()
+    
+    visualize_predictions(backbone=args.backbone)
