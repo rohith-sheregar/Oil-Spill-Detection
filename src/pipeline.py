@@ -43,7 +43,7 @@ def load_module1(checkpoint_path: str, device: str) -> OilSpillModel:
 
 
 def run_module1(
-    model: OilSpillDeepLab,
+    model: torch.nn.Module,
     image_path: str,
     device: str,
 ) -> tuple:
