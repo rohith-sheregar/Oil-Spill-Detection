@@ -52,15 +52,15 @@ Output: Spill Map + Vessel ID + Confidence Score
 ## 📊 Pipeline Evaluation & Results
 
 ### Modules 1 & 2: Segmentation and Look-alike Rejection
-After upgrading our architecture and testing on a combined dataset (SOS + MKLab), we evaluated our baseline model (MobileNetV3) against our final model (EfficientNet-B4) across 949 test images.
+Module 1 (segmentation) is evaluated on all **1,725 test images** (Sentinel + PALSAR + MKLab) via the combined DataLoader. Module 2 (look-alike rejection) is evaluated on the **949 images** that carry ground-truth labels suitable for binary oil-vs-look-alike classification (Sentinel + MKLab).
 
 | Backbone Model | M1 IoU | M1 Dice | M2 Precision | M2 Recall | Pipeline F1 |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| MobileNetV3-Large (256px) | 0.5673 | 0.6848 | **0.9582** | **0.3599** | **0.5232** |
-| **EfficientNet-B4 (512px)** | **0.6349** | **0.7423** | 0.9379 | 0.3386 | 0.4975 |
+| MobileNetV3-Large (256px) | 0.5663 | 0.6835 | **0.9582** | **0.3599** | **0.5232** |
+| **EfficientNet-B4 (512px)** | **0.6344** | **0.7414** | 0.9379 | 0.3386 | 0.4975 |
 
 **🏆 Conclusion:**
-**EfficientNet-B4** is our final selected model. It achieved a massive **+6.7% improvement in segmentation accuracy (IoU)** by effectively detecting thin, broken oil streaks that the baseline missed. The Look-alike Classifier (Module 2) acts as a strict filter, maintaining an exceptional ~94% Precision in rejecting natural look-alikes.
+**EfficientNet-B4** is our final selected model. It achieved a **+6.8% improvement in segmentation accuracy (IoU)** by effectively detecting thin, broken oil streaks that the baseline missed. The Look-alike Classifier (Module 2) acts as a strict filter, maintaining an exceptional ~94–96% Precision in rejecting natural look-alikes.
 
 ### Module 3: AIS Vessel Filtering
 We validated Module 3 using real historical AIS data from **MarineCadastre.gov** for the **Galveston/Houston Ship Channel** (August 3-4, 2022).
