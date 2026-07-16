@@ -1,0 +1,42 @@
+{
+  "spill_geometry": {
+    "centroid_lat": 29.2,
+    "centroid_lon": -94.8,
+    "area_km2": 12.5,
+    "elongation": 3.2,
+    "sar_acquisition_time": "2022-08-03 14:00:00"
+  },
+  "generated_at": "2026-07-16T10:12:52.356262+00:00",
+  "candidates": [
+    {
+      "mmsi": 636091878,
+      "vessel_name": "GASCHEM CARIBIC",
+      "vessel_category": "tanker",
+      "composite_confidence_score": 0.45,
+      "evidence": {
+        "s_drift": 0.0,
+        "s_ais_anomaly": 1.0,
+        "s_morphology": 0.5,
+        "s_temporal": 0.5,
+        "forward_drift_match": 0.0,
+        "backward_drift_match": 0.0,
+        "raw_ais_anomaly_score": 0.636036
+      }
+    },
+    {
+      "mmsi": 636018551,
+      "vessel_name": "VOGE JULIE",
+      "vessel_category": "cargo",
+      "composite_confidence_score": 0.369569,
+      "evidence": {
+        "s_drift": 0.0,
+        "s_ais_anomaly": 0.731898,
+        "s_morphology": 0.5,
+        "s_temporal": 0.5,
+        "forward_drift_match": 0.0,
+        "backward_drift_match": 0.0,
+        "raw_ais_anomaly_score": 0.575339
+      }
+    }
+  ]
+}
