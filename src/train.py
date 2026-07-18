@@ -104,10 +104,6 @@ def run_training_with_loaders(train_loader, val_loader, test_loader=None):
     # Warm up backbone first — freeze encoder for first 5 epochs
     for param in model.base.encoder.parameters():
         param.requires_grad = False
-
-    if torch.cuda.device_count() > 1:
-        print(f"Using {torch.cuda.device_count()} GPUs!")
-        model = nn.DataParallel(model)
         
     model = model.to(device)
 
