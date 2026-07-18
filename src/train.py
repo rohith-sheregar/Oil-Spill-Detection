@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from tqdm import tqdm
 import os
 import pandas as pd
@@ -11,7 +11,7 @@ from src.model import get_model
 from src.utils import bce_dice_loss, dice_score, iou_score, save_checkpoint
 
 # Gradient scaler for mixed precision
-scaler = GradScaler()
+scaler = GradScaler('cuda')
 
 def plot_and_save(train_vals, val_vals, ylabel, title, filename):
     plt.figure(figsize=(8,5))
@@ -37,7 +37,7 @@ def train_one_epoch(model, loader, optimizer, device):
         optimizer.zero_grad()
 
         # Mixed precision forward pass
-        with autocast():
+        with autocast('cuda'):
             preds = model(images)
             if preds.shape != masks.shape:
                 preds = torch.nn.functional.interpolate(
@@ -72,7 +72,7 @@ def evaluate(model, loader, device):
         for images, masks in tqdm(loader, desc="Evaluating", leave=False):
             images = images.to(device)
             masks  = masks.to(device)
-            with autocast():
+            with autocast('cuda'):
                 preds = model(images)
                 if preds.shape != masks.shape:
                     preds = torch.nn.functional.interpolate(
