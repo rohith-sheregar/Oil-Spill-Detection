@@ -135,9 +135,19 @@ class MKLabDataset(Dataset):
         h, w = image.shape[:2]
         if h > self.target_size and w > self.target_size:
             if self.is_train:
-                # Random crop for training
-                top  = np.random.randint(0, h - self.target_size)
-                left = np.random.randint(0, w - self.target_size)
+                oil_pixels = np.argwhere(mask == 1)
+                if len(oil_pixels) > 0 and np.random.rand() < 0.7:
+                    anchor_y, anchor_x = oil_pixels[np.random.randint(len(oil_pixels))]
+                    jitter = self.target_size // 3
+                    top  = np.clip(anchor_y - self.target_size // 2 + 
+                                    np.random.randint(-jitter, jitter), 
+                                    0, h - self.target_size)
+                    left = np.clip(anchor_x - self.target_size // 2 + 
+                                    np.random.randint(-jitter, jitter), 
+                                    0, w - self.target_size)
+                else:
+                    top  = np.random.randint(0, h - self.target_size)
+                    left = np.random.randint(0, w - self.target_size)
             else:
                 # Centre crop for val/test — reproducible
                 top  = (h - self.target_size) // 2

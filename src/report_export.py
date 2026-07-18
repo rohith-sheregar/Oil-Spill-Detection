@@ -26,7 +26,8 @@ def export_attribution_report(
 
     Args:
         spill_geometry: dict with keys like centroid_lat, centroid_lon,
-                        area_km2, elongation, sar_acquisition_time.
+                        coordinate_source, area_km2, elongation,
+                        sar_acquisition_time.
         drift_results_df: output of run_drift_attribution() — DataFrame
                           sorted by C descending.
         output_path: file path for the JSON output.
@@ -49,8 +50,21 @@ def export_attribution_report(
             },
         })
 
+    spill_geometry_for_export = dict(spill_geometry)
+    has_centroid_coordinates = (
+        "centroid_lat" in spill_geometry_for_export
+        and "centroid_lon" in spill_geometry_for_export
+    )
+    has_spill_coordinates = (
+        "spill_lat" in spill_geometry_for_export
+        and "spill_lon" in spill_geometry_for_export
+    )
+    has_coordinates = has_centroid_coordinates or has_spill_coordinates
+    if has_coordinates and "coordinate_source" not in spill_geometry_for_export:
+        spill_geometry_for_export["coordinate_source"] = "synthetic"
+
     report = {
-        "spill_geometry": spill_geometry,
+        "spill_geometry": spill_geometry_for_export,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "candidates": candidates,
     }
@@ -63,4 +77,4 @@ def export_attribution_report(
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, default=str)
 
-    print(f"💾 Attribution report saved → {output_path}")
+    print(f"Attribution report saved -> {output_path}")

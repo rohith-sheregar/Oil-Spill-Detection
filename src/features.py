@@ -6,9 +6,11 @@ look-alike rejection classifier.
 """
 
 import math
+import os
 import numpy as np
 import cv2
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -27,12 +29,17 @@ class PatchFeatures:
     mean_intensity: float
     std_intensity:  float
     is_night:       float  # 1.0 = night, 0.0 = day
+    # Geolocation metadata (NOT used as classifier features — descriptive only)
+    lat:               Optional[float] = None
+    lon:               Optional[float] = None
+    coordinate_source: Optional[str]   = None  # "synthetic" or "real"
 
 
 def extract_features(
     mask: np.ndarray,
     image: np.ndarray,
     acquisition_hour: int = 2,
+    image_filename: Optional[str] = None,
 ) -> list:
     """
     Extract geometric, morphological, and contextual features from each
@@ -42,6 +49,8 @@ def extract_features(
         mask:             Binary numpy array of shape (H, W), values 0 or 1.
         image:            Original SAR grayscale image of shape (H, W).
         acquisition_hour: UTC hour the image was acquired (default 2 = night).
+        image_filename:   Optional filename of the source image (used for
+                          synthetic geocoding). If None, lat/lon will be None.
 
     Returns:
         List of PatchFeatures, one per valid connected component (area >= 50 px).
@@ -53,7 +62,7 @@ def extract_features(
     is_night = 1.0 if (acquisition_hour < 6 or acquisition_hour >= 20) else 0.0
 
     # Connected components analysis
-    num_labels, labels_map, stats, _ = cv2.connectedComponentsWithStats(
+    num_labels, labels_map, stats, centroids = cv2.connectedComponentsWithStats(
         mask_u8, connectivity=8
     )
 
@@ -131,6 +140,24 @@ def extract_features(
         # ── Area in km² (Sentinel-1: 10m resolution) ─────────────────────────
         area_km2 = area_pixels * (10.0 * 10.0) / 1e6
 
+        # ── Synthetic geocoding (if filename provided) ────────────────────────
+        patch_lat = None
+        patch_lon = None
+        coord_source = None
+        if image_filename is not None:
+            from src.geocoding import assign_synthetic_coordinates
+
+            patch_cx, patch_cy = map(float, centroids[label_id])
+            img_h, img_w = mask.shape[:2]
+            geo = assign_synthetic_coordinates(
+                os.path.basename(image_filename),
+                patch_cx, patch_cy,
+                image_width=img_w, image_height=img_h,
+            )
+            patch_lat = geo["lat"]
+            patch_lon = geo["lon"]
+            coord_source = geo["coordinate_source"]
+
         features.append(PatchFeatures(
             area_pixels=area_pixels,
             area_km2=area_km2,
@@ -145,6 +172,9 @@ def extract_features(
             mean_intensity=mean_intensity,
             std_intensity=std_intensity,
             is_night=is_night,
+            lat=patch_lat,
+            lon=patch_lon,
+            coordinate_source=coord_source,
         ))
 
     return features
@@ -153,6 +183,11 @@ def extract_features(
 def features_to_array(features: list) -> np.ndarray:
     """
     Convert a list of PatchFeatures to a 2D numpy array of shape (N, 13).
+
+    NOTE: lat, lon, and coordinate_source are intentionally EXCLUDED from
+    the feature array — they are descriptive metadata, not discriminative
+    features.  Including them would let the classifier overfit to specific
+    training locations.
 
     Args:
         features: List of PatchFeatures objects.
@@ -193,9 +228,17 @@ def describe_patch(f) -> str:
     Returns:
         Formatted description string.
     """
+    loc_str = ""
+    if f.lat is not None and f.lon is not None:
+        loc_str = (
+            ' | Coordinates: '
+            f'{{"lat": {f.lat:.4f}, "lon": {f.lon:.4f}, '
+            f'"coordinate_source": "{f.coordinate_source}"}}'
+        )
     return (
         f"Area: {f.area_km2:.3f}sq.km | "
         f"Elongation: {f.elongation:.2f} | "
         f"Compactness: {f.compactness:.3f} | "
         f"Night: {bool(f.is_night)}"
+        f"{loc_str}"
     )

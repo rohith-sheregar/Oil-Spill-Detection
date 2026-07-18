@@ -90,6 +90,7 @@ def run_module2(
     image: np.ndarray,
     classifier: LookAlikeClassifier,
     acquisition_hour: int = 2,
+    image_filename: str = None,
 ) -> tuple:
     """
     Run look-alike rejection (Module 2) on the output of Module 1.
@@ -99,13 +100,19 @@ def run_module2(
         image:            Grayscale image array of shape (H, W).
         classifier:       LookAlikeClassifier instance (trained or untrained).
         acquisition_hour: UTC hour of SAR acquisition.
+        image_filename:   Optional source image path for synthetic coordinates.
 
     Returns:
         Tuple of (features: list[PatchFeatures], predictions: list[dict]).
         If classifier is untrained, predictions is an empty list and a warning
         is printed.
     """
-    features = extract_features(mask, image, acquisition_hour=acquisition_hour)
+    features = extract_features(
+        mask,
+        image,
+        acquisition_hour=acquisition_hour,
+        image_filename=image_filename,
+    )
 
     if not classifier.is_trained:
         warnings.warn(
@@ -256,7 +263,8 @@ def run_pipeline(
 
     Returns:
         Dict with keys:
-            mask, features, predictions, n_detected, n_confirmed_oil, n_rejected, gt_mask
+            mask, features, predictions, n_detected, n_confirmed_oil,
+            n_rejected, spill_lat, spill_lon, coordinate_source, gt_mask
     """
     device = config.DEVICE
 
@@ -305,7 +313,11 @@ def run_pipeline(
     # ── Step 4: Run Module 2 look-alike rejection ─────────────────────────────
     print("🌊  Running Module 2 look-alike rejection…")
     features, predictions = run_module2(
-        binary_mask, original_image, classifier, acquisition_hour
+        binary_mask,
+        original_image,
+        classifier,
+        acquisition_hour=acquisition_hour,
+        image_filename=image_path,
     )
     n_detected = len(features)
 
@@ -331,8 +343,45 @@ def run_pipeline(
             n_confirmed_oil += 1  # treat unclassified as potential oil for safety
         print(f"  Patch {i+1}: {status} {conf} | {desc}")
 
+    selected_spill = None
+    if predictions:
+        confirmed = [
+            (pred["confidence"], feat)
+            for feat, pred in zip(features, predictions)
+            if pred["is_oil"] and feat.lat is not None and feat.lon is not None
+        ]
+        if confirmed:
+            _, selected_spill = max(confirmed, key=lambda item: item[0])
+    else:
+        coordinate_candidates = [
+            feat for feat in features
+            if feat.lat is not None and feat.lon is not None
+        ]
+        if coordinate_candidates:
+            selected_spill = max(
+                coordinate_candidates,
+                key=lambda feat: feat.area_km2,
+            )
+
+    spill_lat = selected_spill.lat if selected_spill is not None else None
+    spill_lon = selected_spill.lon if selected_spill is not None else None
+    coordinate_source = (
+        selected_spill.coordinate_source if selected_spill is not None else None
+    )
+
     print(f"{'─'*60}")
     print(f"  Summary: {n_confirmed_oil} confirmed oil | {n_rejected} rejected")
+    if spill_lat is not None and spill_lon is not None:
+        print(
+            '  Selected spill coordinate: '
+            f'{{"spill_lat": {spill_lat:.6f}, "spill_lon": {spill_lon:.6f}, '
+            f'"coordinate_source": "{coordinate_source}"}}'
+        )
+    else:
+        print(
+            "  Selected spill coordinate: "
+            "spill_lat=None, spill_lon=None, coordinate_source=None"
+        )
     print(f"{'─'*60}\n")
 
     # ── Step 6: Visualise ─────────────────────────────────────────────────────
@@ -351,6 +400,9 @@ def run_pipeline(
         "n_detected":       n_detected,
         "n_confirmed_oil":  n_confirmed_oil,
         "n_rejected":       n_rejected,
+        "spill_lat":        spill_lat,
+        "spill_lon":        spill_lon,
+        "coordinate_source": coordinate_source,
         "gt_mask":          gt_mask,
     }
 
