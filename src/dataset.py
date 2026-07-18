@@ -267,7 +267,8 @@ def get_loaders(batch_size=config.BATCH_SIZE, dataset=None):
 
     train_loader = DataLoader(
         train_ds, batch_size=batch_size, shuffle=True,
-        num_workers=config.NUM_WORKERS, pin_memory=config.PIN_MEMORY
+        num_workers=config.NUM_WORKERS, pin_memory=config.PIN_MEMORY,
+        drop_last=True
     )
     val_loader = DataLoader(
         val_ds, batch_size=batch_size, shuffle=False,
