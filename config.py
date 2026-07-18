@@ -31,7 +31,7 @@ PRED_DIR = os.path.join(BASE_DIR, "outputs", "predictions")
 
 IMAGE_SIZE = 512
 BATCH_SIZE = 16
-NUM_EPOCHS = 60
+NUM_EPOCHS = 30
 LEARNING_RATE = 2e-4
 NUM_WORKERS = 4
 PIN_MEMORY = True
