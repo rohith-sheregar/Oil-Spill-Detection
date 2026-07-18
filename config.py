@@ -30,10 +30,10 @@ CHECKPOINT_DIR = os.path.join(BASE_DIR, "outputs", "checkpoints")
 PRED_DIR = os.path.join(BASE_DIR, "outputs", "predictions")
 
 IMAGE_SIZE = 512
-BATCH_SIZE = 16
+BATCH_SIZE = 8
 NUM_EPOCHS = 30
 LEARNING_RATE = 2e-4
-NUM_WORKERS = 4
+NUM_WORKERS = 2
 PIN_MEMORY = True
 
 TRAIN_SPLIT = 0.85
