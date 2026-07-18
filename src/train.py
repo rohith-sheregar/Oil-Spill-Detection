@@ -26,8 +26,20 @@ def plot_and_save(train_vals, val_vals, ylabel, title, filename):
     plt.savefig(os.path.join(save_dir, filename), dpi=300)
     plt.close()
 
+def freeze_batchnorm(model):
+    """
+    Freeze BatchNorm2d layers — use pretrained running stats, don't 
+    re-estimate them from small batches. Critical when batch_size < ~8.
+    """
+    for module in model.modules():
+        if isinstance(module, torch.nn.BatchNorm2d):
+            module.eval()
+            for param in module.parameters():
+                param.requires_grad = False
+
 def train_one_epoch(model, loader, optimizer, device):
     model.train()
+    freeze_batchnorm(model)
     total_loss = 0
     total_dice = 0
     total_iou = 0
