@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import config
 from src.dataset import get_loaders
 from src.model import get_model
-from src.utils import bce_dice_loss, dice_score, iou_score, save_checkpoint
+from src.utils import bce_dice_loss, dice_score, iou_score, save_checkpoint, load_checkpoint
 
 # Gradient scaler for mixed precision
 scaler = GradScaler('cuda')
@@ -117,11 +117,34 @@ def run_training_with_loaders(train_loader, val_loader, test_loader=None):
 
     best_iou = 0
     
+    start_epoch = 1
+    resume_path = os.path.join(save_dir, "best_model.pth")
+    if os.path.exists(resume_path):
+        print(f"Found existing checkpoint at {resume_path} — resuming training state")
+        last_epoch = load_checkpoint(resume_path, get_unwrapped_model(model), optimizer, device)
+        start_epoch = last_epoch + 1
+        print(f"  → Resuming from epoch {start_epoch}")
+        
+        if start_epoch > 5:
+            print("  → Resuming past epoch 5: ensuring encoder is unfrozen")
+            unwrapped_model = get_unwrapped_model(model)
+            for param in unwrapped_model.base.encoder.parameters():
+                param.requires_grad = True
+            optimizer = torch.optim.AdamW(
+                model.parameters(),
+                lr=config.LEARNING_RATE / 5, weight_decay=1e-4
+            )
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=config.NUM_EPOCHS - 5, eta_min=1e-6
+            )
+            for _ in range(last_epoch - 5):
+                scheduler.step()
+                
     train_losses, val_losses = [], []
     train_ious, val_ious = [], []
     train_dices, val_dices = [], []
 
-    for epoch in range(1, config.NUM_EPOCHS + 1):
+    for epoch in range(start_epoch, config.NUM_EPOCHS + 1):
         # Unfreeze encoder after epoch 5
         if epoch == 6:
             print("  → Unfreezing encoder backbone")
@@ -135,6 +158,7 @@ def run_training_with_loaders(train_loader, val_loader, test_loader=None):
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 optimizer, T_max=config.NUM_EPOCHS - 5, eta_min=1e-6
             )
+            torch.cuda.empty_cache()
 
         train_loss, train_dice, train_iou = train_one_epoch(model, train_loader, optimizer, device)
         val_loss, val_dice, val_iou = evaluate(model, val_loader, device)
