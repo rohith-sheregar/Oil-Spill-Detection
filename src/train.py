@@ -119,6 +119,10 @@ def run_training_with_loaders(train_loader, val_loader, test_loader=None):
         
     model = model.to(device)
 
+    if torch.cuda.device_count() > 1:
+        print(f"Using {torch.cuda.device_count()} GPUs via DataParallel")
+        model = torch.nn.DataParallel(model)
+
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=config.LEARNING_RATE, weight_decay=1e-4
